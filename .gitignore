@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Claude Code 설정 (로컬 전용)
+.claude/
+
+# 영상/이미지 원본 파일 (용량이 크므로 git에 포함하지 않음)
+*.mov
+*.mp4
+*.avi
+*.mkv
+*.m4v
+
+# 환경 변수 파일 (API 키 포함 — 절대 커밋 금지)
+flutter_application_1/config/env.json
+flutter_application_1/config/env.prod.json

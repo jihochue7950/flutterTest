@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze *)",
+      "Bash(flutter pub *)",
+      "Bash(mkdir -p /Users/chujiho/Desktop/flutterProject/flutter_application_1/config && mkdir -p /Users/chujiho/Desktop/flutterProject/flutter_application_1/.vscode)"
+    ],
+    "additionalDirectories": [
+      "/Users/chujiho/Desktop/flutterProject/flutter_application_1"
+    ]
+  }
+}

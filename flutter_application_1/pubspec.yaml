@@ -1,0 +1,44 @@
+name: flutter_application_1
+description: "AI 기반 결혼 프로포즈 경험 앱 MVP"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # 상태 관리
+  flutter_riverpod: ^2.5.1
+
+  # 라우팅
+  go_router: ^14.0.0
+
+  # 네트워크
+  web_socket_channel: ^2.4.0
+  http: ^1.2.0
+
+  # 유틸리티
+  uuid: ^4.4.0
+  equatable: ^2.0.5
+  crypto: ^3.0.3
+
+  # 파일 선택
+  file_picker: ^8.0.0
+
+  # 영상 재생 (로컬 에셋 + 네트워크 URL 모두 지원)
+  video_player: ^2.8.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/video/

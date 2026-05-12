@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "개발 (로컬 서버)",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": [
+        "--dart-define-from-file=config/env.json"
+      ]
+    },
+    {
+      "name": "운영 (프로덕션 서버)",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": [
+        "--dart-define-from-file=config/env.prod.json"
+      ]
+    }
+  ]
+}
