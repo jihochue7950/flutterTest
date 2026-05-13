@@ -5,26 +5,40 @@ import 'package:video_player/video_player.dart';
 /// AI 트리거로 재생되는 영상 화면.
 /// - videoUrl이 "assets/"로 시작 → 로컬 번들 에셋 재생
 /// - 그 외 → 네트워크 URL 재생 (실제 운영 / CDN)
+///
+/// [onVideoEnd] : 영상이 자연 종료됐을 때 호출되는 콜백.
+///               수동으로 닫기 버튼을 눌렀을 때는 호출되지 않음.
+/// [preloadedController] : 외부에서 미리 initialize()한 컨트롤러.
+///                         제공되면 즉시 재생 — initialize() 대기 시간 없음.
+///                         이 화면이 dispose 시 컨트롤러도 함께 dispose.
 class LocalVideoPlayerScreen extends StatefulWidget {
   final String videoUrl;
+  final VoidCallback? onVideoEnd;
+  final VideoPlayerController? preloadedController;
 
-  const LocalVideoPlayerScreen({super.key, required this.videoUrl});
+  const LocalVideoPlayerScreen({
+    super.key,
+    required this.videoUrl,
+    this.onVideoEnd,
+    this.preloadedController,
+  });
 
   @override
   State<LocalVideoPlayerScreen> createState() => _LocalVideoPlayerScreenState();
 }
 
 class _LocalVideoPlayerScreenState extends State<LocalVideoPlayerScreen> {
-  late VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   bool _initialized = false;
   String? _error;
+
+  bool _ended = false;
 
   bool get _isAsset => widget.videoUrl.startsWith('assets/');
 
   @override
   void initState() {
     super.initState();
-    // 가로 고정
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -35,37 +49,66 @@ class _LocalVideoPlayerScreenState extends State<LocalVideoPlayerScreen> {
 
   Future<void> _initPlayer() async {
     try {
-      _controller = _isAsset
-          ? VideoPlayerController.asset(widget.videoUrl)
-          : VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+      final preloaded = widget.preloadedController;
 
-      await _controller.initialize();
-      _controller.setLooping(false);
-      await _controller.play();
-      if (mounted) setState(() => _initialized = true);
+      if (preloaded != null && preloaded.value.isInitialized) {
+        // 선 초기화된 컨트롤러 사용 → initialize() 생략으로 즉시 재생
+        _controller = preloaded;
+        _controller!.setLooping(false);
+        await _controller!.play();
+        if (mounted) setState(() => _initialized = true);
+      } else {
+        // 선 초기화 컨트롤러가 없거나 아직 준비 안 됨 → 일반 초기화
+        _controller = _isAsset
+            ? VideoPlayerController.asset(widget.videoUrl)
+            : VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+        await _controller!.initialize();
+        _controller!.setLooping(false);
+        await _controller!.play();
+        if (mounted) setState(() => _initialized = true);
+      }
 
-      // 재생 완료 시 화면 종료
-      _controller.addListener(() {
-        if (_controller.value.position >= _controller.value.duration &&
-            _controller.value.duration > Duration.zero &&
-            mounted) {
-          _exit();
-        }
-      });
+      _controller!.addListener(_onVideoProgress);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
   }
 
-  void _exit() {
+  void _onVideoProgress() {
+    if (_ended) return;
+    if (!mounted) return;
+    if (_controller == null) return;
+    if (_controller!.value.duration <= Duration.zero) return;
+    if (_controller!.value.position < _controller!.value.duration) return;
+
+    _ended = true;
+    _controller!.removeListener(_onVideoProgress);
+    _exitNaturally();
+  }
+
+  /// 영상 자연 종료 → onVideoEnd 콜백 호출 후 pop
+  void _exitNaturally() {
+    _restoreOrientation();
+    widget.onVideoEnd?.call();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  /// 닫기 버튼 → 그냥 pop (onVideoEnd 호출 안 함)
+  void _exitManually() {
+    _restoreOrientation();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  void _restoreOrientation() {
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    if (mounted) Navigator.of(context).pop();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    // _initPlayer가 완료되기 전에 dispose 될 수도 있으므로 ?. 사용
+    _controller?.removeListener(_onVideoProgress);
+    _controller?.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
@@ -80,12 +123,12 @@ class _LocalVideoPlayerScreenState extends State<LocalVideoPlayerScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // ── 영상 ──────────────────────────────────
+            // _initialized == true 이면 _controller는 반드시 non-null
             if (_initialized)
               Center(
                 child: AspectRatio(
-                  aspectRatio: _controller.value.aspectRatio,
-                  child: VideoPlayer(_controller),
+                  aspectRatio: _controller!.value.aspectRatio,
+                  child: VideoPlayer(_controller!),
                 ),
               )
             else if (_error != null)
@@ -95,21 +138,19 @@ class _LocalVideoPlayerScreenState extends State<LocalVideoPlayerScreen> {
                 child: CircularProgressIndicator(color: Colors.white54),
               ),
 
-            // ── 닫기 버튼 ─────────────────────────────
             Positioned(
               top: 20,
               right: 20,
               child: SafeArea(
                 child: IconButton(
                   icon: const Icon(Icons.close, color: Colors.white70, size: 28),
-                  onPressed: _exit,
+                  onPressed: _exitManually,
                 ),
               ),
             ),
 
-            // ── 재생/일시정지 오버레이 ─────────────────
-            if (_initialized)
-              _PlayPauseOverlay(controller: _controller),
+            // _initialized == true 이면 _controller는 반드시 non-null
+            if (_initialized) _PlayPauseOverlay(controller: _controller!),
           ],
         ),
       ),
@@ -117,11 +158,12 @@ class _LocalVideoPlayerScreenState extends State<LocalVideoPlayerScreen> {
   }
 
   void _togglePlayPause() {
-    if (!_initialized) return;
+    // _initialized 체크 이후이므로 _controller는 non-null
+    if (!_initialized || _controller == null) return;
     setState(() {
-      _controller.value.isPlaying
-          ? _controller.pause()
-          : _controller.play();
+      _controller!.value.isPlaying
+          ? _controller!.pause()
+          : _controller!.play();
     });
   }
 }
@@ -153,7 +195,6 @@ class _PlayPauseOverlayState extends State<_PlayPauseOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    // 하단 프로그레스 바
     return Positioned(
       bottom: 0,
       left: 0,

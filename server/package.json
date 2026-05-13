@@ -1,0 +1,13 @@
+{
+  "name": "local-test-server",
+  "version": "1.0.0",
+  "description": "AI 아바타 대화 로컬 테스트 서버 (WebSocket + API + 초대 페이지)",
+  "main": "local_server.js",
+  "scripts": {
+    "start": "node local_server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "uuid": "^9.0.0"
+  }
+}

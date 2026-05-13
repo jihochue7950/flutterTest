@@ -10,6 +10,11 @@ enum EventType {
   videoPlayRequested,
   videoPlaying,
   sessionCompleted,
+  // AI 아바타 대화 이벤트
+  aiSpeech,        // AI 텍스트 응답 → TV TTS 재생 + User B 화면 표시
+  userBSpeech,     // User B 음성 인식 결과 → 백엔드 LLM으로 전달
+  aiListening,     // AI가 User B 응답 대기 중 → User B 마이크 버튼 활성화
+  aiIntroStarted,  // AI 자기소개 시작 신호
   unknown,
 }
 
@@ -34,6 +39,14 @@ extension EventTypeX on EventType {
         return '영상 재생 중';
       case EventType.sessionCompleted:
         return '세션 완료';
+      case EventType.aiSpeech:
+        return 'AI 음성 응답';
+      case EventType.userBSpeech:
+        return 'User B 발화';
+      case EventType.aiListening:
+        return 'AI 대기 중';
+      case EventType.aiIntroStarted:
+        return 'AI 자기소개 시작';
       case EventType.unknown:
         return '알 수 없는 이벤트';
     }

@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/session/screens/session_create_screen.dart';
 import '../../features/session/screens/session_shell_screen.dart';
+import '../../features/avatar/screens/ai_avatar_screen.dart';
+import '../../features/invite/screens/invite_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -35,6 +37,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/session/:sessionId/control',
         redirect: (context, state) =>
             '/session/${state.pathParameters['sessionId']}?tab=1',
+      ),
+      // TV 전체화면 AI 아바타 (TV 기기에서 직접 접근)
+      GoRoute(
+        path: '/session/:sessionId/avatar',
+        builder: (context, state) => AiAvatarScreen(
+          sessionId: state.pathParameters['sessionId']!,
+        ),
+      ),
+      // User B 초대 화면 (SMS 링크로 접속)
+      GoRoute(
+        path: '/invite/:token',
+        builder: (context, state) => InviteScreen(
+          token: state.pathParameters['token']!,
+        ),
       ),
     ],
   );

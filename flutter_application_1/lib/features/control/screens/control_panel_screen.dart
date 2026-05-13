@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/control_provider.dart';
 import '../../session/providers/session_provider.dart';
-import '../../cast/screens/local_video_player_screen.dart';
 import '../../../core/models/event_model.dart';
 import '../../../core/models/session_model.dart';
 
@@ -21,29 +20,20 @@ class _ControlPanelScreenState extends ConsumerState<ControlPanelScreen> {
   @override
   void initState() {
     super.initState();
+    // ref.read는 initState의 addPostFrameCallback에서 사용 가능
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(controlProvider.notifier).connectWebSocket(widget.sessionId);
-
-      // AI 트리거 감지 → 영상 자동 재생
-      ref.listen<ControlState>(controlProvider, (prev, next) {
-        if (prev?.isVideoPlayRequested == false &&
-            next.isVideoPlayRequested == true &&
-            mounted) {
-          final url = next.videoUrl ?? 'assets/video/proposal.mp4';
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => LocalVideoPlayerScreen(videoUrl: url),
-              fullscreenDialog: true,
-            ),
-          );
-        }
-      });
+      if (mounted) {
+        ref.read(controlProvider.notifier).connectWebSocket(widget.sessionId);
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final control = ref.watch(controlProvider);
+
+    // 영상 재생은 AiAvatarScreen(Tab2)에서 단독으로 처리
+    // IndexedStack에서 양쪽이 동시에 push하면 영상이 2번 재생되므로 여기서는 제거
     final sessionState = ref.watch(sessionProvider);
     final session = sessionState.session;
 
