@@ -1,13 +1,18 @@
 {
-  "name": "local-test-server",
+  "name": "ai-proposal-server",
   "version": "1.0.0",
-  "description": "AI 아바타 대화 로컬 테스트 서버 (WebSocket + API + 초대 페이지)",
-  "main": "local_server.js",
+  "description": "AI 아바타 대화 서버 (로컬 테스트 + AWS 배포)",
+  "main": "server.js",
   "scripts": {
-    "start": "node local_server.js"
+    "start:local": "node local_server.js",
+    "start:prod":  "node server.js",
+    "pm2:start":   "pm2 start ecosystem.config.js",
+    "pm2:stop":    "pm2 stop ai-proposal-server",
+    "pm2:restart": "pm2 restart ai-proposal-server",
+    "pm2:logs":    "pm2 logs ai-proposal-server"
   },
   "dependencies": {
-    "ws": "^8.16.0",
+    "ws":   "^8.16.0",
     "uuid": "^9.0.0"
   }
 }

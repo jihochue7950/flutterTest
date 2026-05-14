@@ -3,7 +3,9 @@
     "allow": [
       "Bash(flutter analyze *)",
       "Bash(flutter pub *)",
-      "Bash(mkdir -p /Users/chujiho/Desktop/flutterProject/flutter_application_1/config && mkdir -p /Users/chujiho/Desktop/flutterProject/flutter_application_1/.vscode)"
+      "Bash(mkdir -p /Users/chujiho/Desktop/flutterProject/flutter_application_1/config && mkdir -p /Users/chujiho/Desktop/flutterProject/flutter_application_1/.vscode)",
+      "PowerShell(Get-ChildItem \"c:/Users/NC644/Desktop/flutterProject/flutterTest/flutter_application_1/android\" -Recurse -File | ForEach-Object { $_.FullName })",
+      "PowerShell(Get-ChildItem \"c:/Users/NC644/Desktop/flutterProject/flutterTest/flutter_application_1/ios\" -Recurse -File | ForEach-Object { $_.FullName })"
     ],
     "additionalDirectories": [
       "/Users/chujiho/Desktop/flutterProject/flutter_application_1"

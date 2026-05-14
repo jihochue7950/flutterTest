@@ -82,32 +82,22 @@ class _AiAvatarScreenState extends ConsumerState<AiAvatarScreen>
         avatar.mode == AvatarMode.speaking || avatar.mode == AvatarMode.intro;
     final isListening = avatar.mode == AvatarMode.listening;
 
-    // shouldPlayVideo → 영상 재생
-    // 영상 자연 종료(onVideoEnd) → Future.microtask로 pop 완료 후 축하 화면 push
+    // shouldPlayVideo → 즉시 영상 화면 push
+    // 영상 자연 종료 → LocalVideoPlayerScreen이 afterScreen으로 축하 화면을 페이드 전환
     ref.listen<AvatarState>(
       avatarProvider(widget.sessionId),
       (prev, next) {
         if (prev?.shouldPlayVideo == false && next.shouldPlayVideo && mounted) {
-          // 선 초기화된 컨트롤러를 넘기고 참조를 null로 — dispose는 LocalVideoPlayerScreen이 담당
+          // 선 초기화 컨트롤러 전달 (없으면 null — LocalVideoPlayerScreen이 폴백 초기화)
           final preloaded = _preloadedController;
           _preloadedController = null;
 
-          final nav = Navigator.of(context);
-          nav.push(
+          Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => LocalVideoPlayerScreen(
                 videoUrl: next.videoUrl,
                 preloadedController: preloaded,
-                onVideoEnd: () {
-                  Future.microtask(() {
-                    nav.push(
-                      MaterialPageRoute(
-                        builder: (_) => const _CongratsScreen(),
-                        fullscreenDialog: true,
-                      ),
-                    );
-                  });
-                },
+                afterScreen: const _CongratsScreen(), // 영상 종료 후 페이드 전환
               ),
               fullscreenDialog: true,
             ),
