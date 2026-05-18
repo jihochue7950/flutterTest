@@ -16,6 +16,11 @@ class SessionModel extends Equatable {
   final String id;
   final SessionStatus status;
   final String? title;
+
+  /// MariaDB user_videos.user_code / ai_questions.user_code
+  /// 서버가 이 값으로 영상 URL과 커스텀 질문을 조회합니다.
+  final String? userCode;
+
   final String? videoId;
   final String? userBPhone;
   final String? inviteToken;
@@ -27,6 +32,7 @@ class SessionModel extends Equatable {
     required this.id,
     required this.status,
     this.title,
+    this.userCode,
     this.videoId,
     this.userBPhone,
     this.inviteToken,
@@ -39,6 +45,7 @@ class SessionModel extends Equatable {
     String? id,
     SessionStatus? status,
     String? title,
+    String? userCode,
     String? videoId,
     String? userBPhone,
     String? inviteToken,
@@ -50,6 +57,7 @@ class SessionModel extends Equatable {
       id: id ?? this.id,
       status: status ?? this.status,
       title: title ?? this.title,
+      userCode: userCode ?? this.userCode,
       videoId: videoId ?? this.videoId,
       userBPhone: userBPhone ?? this.userBPhone,
       inviteToken: inviteToken ?? this.inviteToken,
@@ -67,6 +75,7 @@ class SessionModel extends Equatable {
         orElse: () => SessionStatus.created,
       ),
       title: json['title'] as String?,
+      userCode: json['userCode'] as String?,
       videoId: json['videoId'] as String?,
       userBPhone: json['userBPhone'] as String?,
       inviteToken: json['inviteToken'] as String?,
@@ -80,6 +89,7 @@ class SessionModel extends Equatable {
         'id': id,
         'status': status.name,
         'title': title,
+        'userCode': userCode,
         'videoId': videoId,
         'userBPhone': userBPhone,
         'inviteToken': inviteToken,
@@ -90,7 +100,7 @@ class SessionModel extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, status, title, videoId, userBPhone,
+        id, status, title, userCode, videoId, userBPhone,
         inviteToken, tvConnected, userBJoined, createdAt,
       ];
 }

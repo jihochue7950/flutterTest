@@ -45,12 +45,20 @@ class SessionNotifier extends StateNotifier<SessionState> {
   SessionNotifier(this._apiClient, this._smsService)
       : super(const SessionState());
 
-  Future<void> createSession({String? title, String? videoId}) async {
+  /// 세션 생성
+  /// [userCode] : MariaDB user_videos.user_code / ai_questions.user_code
+  ///              서버가 이 값으로 영상 URL과 커스텀 질문을 조회합니다.
+  Future<void> createSession({
+    String? title,
+    String? videoId,
+    String? userCode,
+  }) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final response = await _apiClient.post('/sessions', {
-        if (title != null) 'title': title,
-        if (videoId != null) 'videoId': videoId,
+        if (title != null)    'title':    title,
+        if (videoId != null)  'videoId':  videoId,
+        if (userCode != null) 'userCode': userCode,
       });
       state = state.copyWith(
         session: SessionModel.fromJson(response),
@@ -61,6 +69,7 @@ class SessionNotifier extends StateNotifier<SessionState> {
         id: const Uuid().v4(),
         status: SessionStatus.created,
         title: title,
+        userCode: userCode,
         videoId: videoId,
         createdAt: DateTime.now(),
       );

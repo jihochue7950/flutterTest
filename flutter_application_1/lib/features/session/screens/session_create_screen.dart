@@ -13,15 +13,15 @@ class SessionCreateScreen extends ConsumerStatefulWidget {
 }
 
 class _SessionCreateScreenState extends ConsumerState<SessionCreateScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _videoIdController = TextEditingController();
-  final _phoneController = TextEditingController();
+  final _formKey          = GlobalKey<FormState>();
+  final _titleController  = TextEditingController();
+  final _userCodeController = TextEditingController(); // MariaDB user_code (문자열)
+  final _phoneController  = TextEditingController();
 
   @override
   void dispose() {
     _titleController.dispose();
-    _videoIdController.dispose();
+    _userCodeController.dispose();
     _phoneController.dispose();
     super.dispose();
   }
@@ -29,10 +29,13 @@ class _SessionCreateScreenState extends ConsumerState<SessionCreateScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // userCode: 문자열 그대로 사용 (예: "jihochu")
+    final userCode = _userCodeController.text.trim();
     final notifier = ref.read(sessionProvider.notifier);
+
     await notifier.createSession(
-      title: _titleController.text.trim(),
-      videoId: _videoIdController.text.trim(),
+      title:    _titleController.text.trim(),
+      userCode: userCode, // 서버가 DB에서 영상·질문 조회에 사용
     );
     await notifier.updatePhone(_phoneController.text.trim());
 
@@ -67,11 +70,12 @@ class _SessionCreateScreenState extends ConsumerState<SessionCreateScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '영상은 사전에 관리자가 서버에 업로드한 것을 사용합니다.',
+                  '영상과 질문은 관리자가 서버에 등록한 것을 사용합니다.',
                   style: TextStyle(color: Colors.grey[500], fontSize: 13),
                 ),
                 const SizedBox(height: 32),
 
+                // ── 세션 이름 ───────────────────────────────────────────────
                 _label('세션 이름'),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -84,24 +88,28 @@ class _SessionCreateScreenState extends ConsumerState<SessionCreateScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                _label('영상 ID (관리자 제공)'),
+                // ── 사용자 코드 (user_code) ──────────────────────────────────
+                _label('사용자 코드 (관리자 제공)'),
                 const SizedBox(height: 4),
                 Text(
-                  '관리자가 미리 서버에 업로드한 영상의 ID를 입력하세요.',
+                  '관리자 시스템에서 등록한 user_code를 입력하세요.\n'
+                  '서버가 이 코드로 DB에서 영상과 커스텀 질문을 자동 조회합니다.',
                   style: TextStyle(color: Colors.grey[500], fontSize: 12),
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
-                  controller: _videoIdController,
+                  controller: _userCodeController,
+                  keyboardType: TextInputType.text,
                   decoration: const InputDecoration(
-                    hintText: '예: vid_abc123',
-                    prefixIcon: Icon(Icons.videocam_outlined),
+                    hintText: '예: jihochu',
+                    prefixIcon: Icon(Icons.person_outline),
                   ),
                   validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? '영상 ID를 입력하세요' : null,
+                      (v == null || v.trim().isEmpty) ? '사용자 코드를 입력하세요' : null,
                 ),
                 const SizedBox(height: 24),
 
+                // ── 상대방 전화번호 ──────────────────────────────────────────
                 _label('상대방 전화번호'),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -113,15 +121,15 @@ class _SessionCreateScreenState extends ConsumerState<SessionCreateScreen> {
                   ),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return '전화번호를 입력하세요';
-                    final digits = v.replaceAll(RegExp(r'\D'), '');
-                    if (digits.length < 10) return '올바른 전화번호를 입력하세요';
+                    if (v.replaceAll(RegExp(r'\D'), '').length < 10) {
+                      return '올바른 전화번호를 입력하세요';
+                    }
                     return null;
                   },
                 ),
                 const SizedBox(height: 32),
 
-                // 흐름 안내
-                _FlowGuide(),
+                const _FlowGuide(),
                 const SizedBox(height: 32),
 
                 SizedBox(
@@ -131,8 +139,7 @@ class _SessionCreateScreenState extends ConsumerState<SessionCreateScreen> {
                     onPressed: _submit,
                     child: const Text(
                       'Chromecast 연결로 이동 →',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -162,6 +169,8 @@ class _SessionCreateScreenState extends ConsumerState<SessionCreateScreen> {
 }
 
 class _FlowGuide extends StatelessWidget {
+  const _FlowGuide();
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -196,11 +205,11 @@ class _FlowGuide extends StatelessWidget {
   }
 
   static const _steps = [
-    '① 세션 생성 → Chromecast 연결',
+    '① 사용자 코드 입력 → 세션 생성 → Chromecast 연결',
     '② User B에게 SMS 초대 발송',
-    '③ User B 접속 → AI 대화 시작',
-    '④ AI가 자동으로 영상 재생 트리거',
-    '⑤ TV에서 영상 자동 재생 💍',
+    '③ User B 접속 → AI 커스텀 질문으로 대화 시작',
+    '④ 모든 질문 완료 → AI가 영상 자동 트리거',
+    '⑤ TV에서 해당 사용자 영상 자동 재생 💍',
   ];
 }
 
