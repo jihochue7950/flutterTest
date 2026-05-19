@@ -103,59 +103,58 @@ class SessionNotifier extends StateNotifier<SessionState> {
   }
 
   /// TV 연결 완료 후 자동으로 호출됨.
-  /// 1) 백엔드에 invite 요청 (토큰 생성)
-  /// 2) Solapi로 User B에게 SMS 자동 발송
+  /// 서버가 응답하면 서버에서 Solapi SMS를 직접 발송하므로 클라이언트에서는 호출하지 않음.
+  /// 서버 없는 로컬 개발 환경에서는 smsService devMode(콘솔 출력)로 폴백.
   Future<void> sendInvite() async {
     final current = state.session;
     if (current == null) return;
     final phone = current.userBPhone?.trim() ?? '';
-    if (phone.isEmpty) return; // 전화번호 없으면 발송 불가
-    if (state.smsSent || state.smsSending) return; // 중복 발송 방지
+    if (phone.isEmpty) return;
+    if (state.smsSent || state.smsSending) return;
 
     state = state.copyWith(smsSending: true, clearError: true);
 
-    String token;
-
-    // ── 1. 백엔드에서 invite 토큰 발급 시도 ──────────────────────────────
+    // ── 1. 백엔드에서 invite 토큰 발급 (서버가 Solapi SMS도 함께 발송)
     try {
       final response = await _apiClient.post(
         '/sessions/${current.id}/invite',
         {'phone': current.userBPhone!},
       );
-      token = response['token'] as String? ?? const Uuid().v4();
+      final token = response['token'] as String? ?? const Uuid().v4();
       state = state.copyWith(
         session: current.copyWith(
           inviteToken: token,
           status: SessionStatus.inviteSent,
         ),
+        smsSent: true,
+        smsSending: false,
       );
+      return;
     } catch (_) {
-      // 백엔드 없을 때 로컬 토큰 생성
-      token = const Uuid().v4();
-      state = state.copyWith(
-        session: current.copyWith(
-          inviteToken: token,
-          status: SessionStatus.inviteSent,
-        ),
-      );
+      // 서버 없음 → 로컬 토큰 생성 후 devMode SMS(콘솔 출력)로 폴백
     }
 
-    // ── 2. Solapi SMS 발송 ────────────────────────────────────────────────
+    // ── 2. 로컬 폴백: 토큰 생성 + devMode SMS ──────────────────────────
+    final token = const Uuid().v4();
     final inviteUrl = '${AppConfig.inviteBaseUrl}/invite/$token';
+    state = state.copyWith(
+      session: current.copyWith(
+        inviteToken: token,
+        status: SessionStatus.inviteSent,
+      ),
+    );
+
     final result = await _smsService.sendInvite(
       toPhone: current.userBPhone!,
       sessionTitle: current.title ?? '',
       inviteUrl: inviteUrl,
     );
 
-    if (result.isSuccess) {
-      state = state.copyWith(smsSent: true, smsSending: false);
-    } else {
-      state = state.copyWith(
-        smsSending: false,
-        error: 'SMS 발송 실패: ${result.error}',
-      );
-    }
+    state = state.copyWith(
+      smsSent: result.isSuccess,
+      smsSending: false,
+      error: result.isSuccess ? null : 'SMS 발송 실패: ${result.error}',
+    );
   }
 
   void markTvConnected() {
