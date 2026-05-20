@@ -99,3 +99,20 @@ flutter install -d [DEVICE_ID]
 | Admin Backend Agent | `.env` 실값 설정, PM2 설정 |
 | Flutter Developer Agent | 새 env 키 추가 시 `app_config.dart` 동기화 |
 | Security Agent | 민감한 환경변수 노출 여부 점검 |
+
+---
+
+## 작업 이력
+
+| 날짜 | 작업 | 결과 |
+|---|---|---|
+| 2026-05-16 | iOS Release 빌드 (`flutter build ios --release --dart-define-from-file=config/env.prod.json`) | ✅ 완료 |
+| 2026-05-16 | 실기기 설치 (`flutter install -d 00008150-001A15DE223A401C`) — USB 없이 독립 실행 가능 | ✅ 완료 |
+| 2026-05-19 | EC2 SSH 보안그룹 인바운드 룰 추가 — `121.167.183.204/32` (port 22) | ✅ 완료 |
+| 2026-05-19 | EC2 `server.js` 패치: `sendSolapiSms()` 추가, invite 핸들러 SMS 호출 연결 | ✅ 완료 |
+| 2026-05-19 | EC2 `ecosystem.config.js` Solapi 키 3개 추가, PM2 재시작 및 `pm2 save` | ✅ 완료 |
+| 2026-05-19 | EC2 `admin-server/.env` 실값 설정 (JWT_SECRET, SERVER_BASE_URL) | ✅ 완료 |
+| 2026-05-19 | `deploy.sh` 배포 스크립트 작성 — `./deploy.sh [server\|admin\|all]` | ✅ 완료 |
+| 2026-05-19 | iOS Release 재빌드 및 재설치 (SMS 경로 변경 반영) | ✅ 완료 |
+| 2026-05-19 | Git 4차 커밋 (`1a9464a`) & push — main 브랜치 | ✅ 완료 |
+| 2026-05-20 | `ai_proposal_system` 서브모듈→실제 파일 재커밋, `.gitignore` 정리, 5차 커밋 (`f11c305`) | ✅ 완료 |

@@ -74,3 +74,15 @@ Solapi SMS 발송, 초대 토큰 관리, 세션 인메모리 저장소를 담당
 | Admin Backend Agent | `proposal-data` 응답 형식 변경 시 파싱 로직 동기화 |
 | DevOps/Build Agent | `ecosystem.config.js`에 `ADMIN_SERVER_URL` 추가 |
 | Flutter Developer Agent | API 응답 형식 변경 시 `SessionModel` 함께 업데이트 |
+
+---
+
+## 작업 이력
+
+| 날짜 | 작업 | 결과 |
+|---|---|---|
+| 2026-05-16 | SMS 발송 경로 서버 경유로 전환 — `sendSolapiSms()` 추가, Flutter 앱에서 Solapi 직접 호출 제거 | ✅ 완료 |
+| 2026-05-19 | EC2 ↔ 로컬 server.js 동기화 — EC2 버전(MariaDB 직접 연결)을 정식 버전으로 확정 | ✅ 완료 |
+| 2026-05-19 | `getUserQuestions()`, `getUserVideoUrl()` 함수 확인 — DB에서 userCode 기반 조회 정상 동작 | ✅ 완료 |
+| 2026-05-19 | `POST /sessions/:id/invite` 핸들러에 SMS 호출 추가 (EC2 직접 패치) | ✅ 완료 |
+| 2026-05-19 | `package.json` `mysql2` 의존성 로컬 동기화 | ✅ 완료 |

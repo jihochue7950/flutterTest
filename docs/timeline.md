@@ -1,111 +1,122 @@
 # 개발 타임라인
 
----
-
-## Phase 0 — 프로젝트 분석 ✅
-
-**상태**: 완료  
-**산출물**:
-- 3팀 구조 설계 완료
-- `docs/` 문서 16개 생성 완료
-- 주요 미결 과제 목록 확정
+> 이 문서는 FLUTTERPROJECT에서 진행된 **실제 작업을 날짜/에이전트별로 기록**합니다.
+> 작업이 완료될 때마다 해당 에이전트가 이 문서를 업데이트합니다.
 
 ---
 
-## Phase 1 — API 계약서 확정 ✅
+## 실제 작업 이력
 
-**상태**: 완료  
-**게이팅 조건**: `docs/shared/api-contracts.md`, `websocket-event-contracts.md` 작성  
-**산출물**:
-- `docs/shared/api-contracts.md`
-- `docs/shared/websocket-event-contracts.md`
-- 3팀 overview 문서
+### 2026-05-16
 
----
+#### [Security Agent] Solapi API 키 Flutter 앱에서 제거
+- `config/env.json`, `config/env.aws.json`, `config/env.prod.json`에서 Solapi 키 3개 제거
+- 이유: 앱 바이너리에 API 키가 노출되면 키 탈취 위험
+- 결과: Flutter 앱은 Solapi 키를 보유하지 않음
 
-## Phase 2 — Team C Admin System 배포 및 DB 실값 설정
+#### [Backend/API Agent] SMS 발송 경로 서버 경유로 전환
+- `server/server.js`에 `sendSolapiSms()` 함수 추가 (HMAC-SHA256 서명)
+- `POST /sessions/:id/invite` 핸들러에서 SMS 자동 발송
+- `session_provider.dart` 수정: 서버 성공 시 클라이언트 SMS 호출 생략
+- 이전 흐름: Flutter → Solapi (IP 차단)
+- 변경 흐름: Flutter → EC2 server.js → Solapi
 
-**상태**: 진행 필요  
-**담당**: Team C (Admin Backend Agent, Admin Frontend Agent), DevOps/Build Agent  
-**게이팅 조건**: `curl http://EC2_IP:8080/api/users/[userCode]/proposal-data` 정상 응답
-
-**작업 목록**:
-- [ ] `admin-server/.env` 실값 설정 (DB_PASSWORD, JWT_SECRET, SERVER_BASE_URL)
-- [ ] `admins` 테이블 bcrypt 해시 교체
-- [ ] `/var/www/ai-proposal/videos` 디렉토리 생성 및 권한 설정
-- [ ] `admin-client` 빌드 및 admin-server 정적 서빙 확인
-- [ ] PM2로 `ai-proposal-admin` 프로세스 시작
-- [ ] 테스트 userCode 1개 등록, 영상 업로드, 질문 4개 등록
-- [ ] `proposal-data` API 응답 검증
+#### [DevOps/Build Agent] iOS Release 빌드 및 실기기 설치
+- 명령: `flutter build ios --release --dart-define-from-file=config/env.prod.json`
+- 대상 기기: iPhone (UDID: 00008150-001A15DE223A401C)
+- 빌드 시간: 24.2s, 용량: 709.2MB
+- USB 없이 독립 실행 가능 (Release 빌드 = 디버그 서버 의존 없음)
+- 서명: 자동 서명 (팀 TP2KGD2S8D)
 
 ---
 
-## Phase 3 — Team B Core Server ↔ Team C 연동 ✅ (코드 완성)
+### 2026-05-18
 
-**상태**: 코드 수정 완료, EC2 배포 필요  
-**담당**: Team B (Backend/API Agent, AI Flow Agent), DevOps/Build Agent  
-**게이팅 조건**: `userCode`별 커스텀 질문과 영상 URL이 세션에 정상 반영
-
-**완료된 작업**:
-- [x] `server.js`: `fetchProposalData(userCode)` 함수 추가
-- [x] `server.js`: `POST /sessions`에서 userCode → proposal-data 자동 조회
-- [x] `server.js`: `session.questions`, `session.videoUrl` 동적 저장
-- [x] `server.js`: AI Flow에서 `QUESTIONS` 하드코딩 → `session.questions` 교체
-- [x] `ecosystem.config.js`: `ADMIN_SERVER_URL` 환경변수 추가
-
-**남은 작업**:
-- [ ] EC2에서 `pm2 restart ai-proposal-server`
-- [ ] `local_server.js` 동일 변경 반영
+#### [Flutter Developer Agent] 3차 수정 git pull 반영
+- `session_model.dart`: `userCode` 필드 추가 (MariaDB user_videos/ai_questions 연결 키)
+- `session_provider.dart`: `createSession()`에 `userCode` 파라미터 추가
+- `session_create_screen.dart`: 영상 ID 입력 → 사용자 코드 입력으로 UI 개편
 
 ---
 
-## Phase 4 — Flutter 앱 AI 대화 E2E 검증
+### 2026-05-19
 
-**상태**: 대기 (Phase 3 EC2 배포 후 진행)  
-**담당**: Team A (Flutter Developer Agent), Team B  
-**게이팅 조건**: 실기기에서 userCode 입력 → AI 대화 4문답 완주
+#### [PM Agent] Harness 3팀 구조 설계 및 문서화
+- 3팀 구조 확정: Team A(Flutter), Team B(Core Server), Team C(Admin System)
+- Cross-Team: PM, QA/QC, DevOps/Build, Security
+- 생성 문서 17개:
+  - `docs/teams/` × 3 (team-a, team-b, team-c)
+  - `docs/agents/` × 10 (flutter-developer, cast-tv, backend-api, ai-flow, admin-backend, admin-frontend, pm, qa-qc, devops-build, security)
+  - `docs/shared/` × 2 (api-contracts, websocket-event-contracts)
+  - `docs/timeline.md`, `docs/harness-development-plan.md`
 
-**작업 목록**:
-- [ ] `env.prod.json` 기준 Release 빌드 후 실기기 설치
-- [ ] `SessionCreateScreen`: userCode + 전화번호 입력 흐름 검증
-- [ ] AI 아바타 TTS 음성 출력 + User B STT 답변 흐름 검증
-- [ ] DB 기반 커스텀 질문 4개 순서 정상 진행 확인
+#### [Backend/API Agent] EC2 ↔ 로컬 server.js 소스 동기화
+- 문제: EC2의 server.js(MariaDB 직접 연결)와 로컬 server.js(Admin API 경유)가 달랐음
+- 판정: EC2 버전이 최신 정식 버전
+- 조치: 로컬을 EC2 버전으로 덮어씀
+- 변경 내용:
+  - `mysql2/promise` 직접 연결 방식 (Admin Server API 경유 제거)
+  - `getUserQuestions(userCode)`: DB에서 커스텀 질문 조회
+  - `getUserVideoUrl(userCode)`: DB에서 영상 URL 조회
+  - `DEFAULT_QUESTIONS`: DB 조회 실패 시 폴백 질문 배열
+- `package.json`: `mysql2` 의존성 추가
+
+#### [DevOps/Build Agent] EC2 SSH 접속 및 서버 배포
+- PEM 키: `~/Desktop/flutterProject.pem`
+- EC2 IP: `3.34.99.69` / 유저: `ubuntu`
+- EC2 보안그룹 SSH 인바운드 룰에 `121.167.183.204/32` 추가 후 접속 성공
+- 배포 내용:
+  - `server.js`에 `sendSolapiSms()` 추가 및 invite 핸들러 연결
+  - `ecosystem.config.js`에 Solapi 키 3개 추가 (`SOLAPI_API_KEY`, `SOLAPI_API_SECRET`, `SOLAPI_FROM`)
+  - `admin-server/.env`: `JWT_SECRET` 실값 교체, `SERVER_BASE_URL` `3.34.99.69`로 수정
+  - PM2 재시작: `pm2 stop → delete → start ecosystem.config.js`
+  - `pm2 save` 완료 (재부팅 후 자동 시작)
+- 확인: `GET /health` → `{"status":"ok","db":"connected"}`
+- 배포 스크립트 생성: `deploy.sh` (server / admin / all 옵션)
+
+#### [Security Agent] Solapi 허용 IP에 EC2 추가
+- 문제: Solapi API 키 허용 IP 목록에 EC2 IP 없음 → 403 Forbidden
+- 오류 메시지: `허용되지 않은 IP(3.34.99.69)로 접근하고 있습니다.`
+- 조치: 솔라피 대시보드 → API 키 관리 → `3.34.99.69` 추가
+- 검증: EC2에서 테스트 SMS 발송 → HTTP 200, `01031577950` 수신 확인
+- EC2 PM2 로그: `📱 SMS 발송 성공 → 010****7950`
+
+#### [DevOps/Build Agent] iOS Release 재빌드 및 재설치
+- 사유: server.js 동기화 및 SMS 경로 변경 반영
+- `USE_REAL_CAST: false` (Mock Cast 유지) + EC2 서버 연결
+- 빌드 완료 후 실기기 재설치
+
+#### [DevOps/Build Agent] Git 4차 커밋 및 Push
+- 브랜치: `main`
+- 커밋: `1a9464a` — 4차 수정 (Harness 구조 도입 및 SMS 서버 발송 전환)
+- 변경: server.js, ecosystem.config.js, package.json, session_provider.dart, docs/ 17개, deploy.sh 등
 
 ---
 
-## Phase 5 — Chromecast 실제 연동
+### 2026-05-20
 
-**상태**: 대기 (하드웨어 준비 필요)  
-**담당**: Team A (Cast/TV Agent)  
-**게이팅 조건**: TV에서 DB 기반 `videoUrl` 영상 재생 확인
-
-**전제 조건**:
-- [ ] Chromecast 동글 또는 Google TV 확보
-- [ ] Google Cast Developer Console 앱 등록 → Application ID 발급
-
-**작업 목록**:
-- [ ] `google_cast_service.dart` 실제 Google Cast SDK 구현
-- [ ] `USE_REAL_CAST=true` 환경변수로 GoogleCastService 전환
-- [ ] TV에서 `videoUrl` 영상 재생 E2E 확인
+#### [DevOps/Build Agent] ai_proposal_system 서브모듈 → 실제 파일 재커밋
+- 문제: `4차 수정` 커밋에서 `ai_proposal_system`이 `160000 commit` (서브모듈 포인터)로 등록됨
+- 원인: 내부에 `.git` 디렉토리가 남아 있어 git이 서브모듈로 인식
+- 조치:
+  1. `git rm --cached ai_proposal_system/ai_proposal_system` (포인터 제거)
+  2. `rm -rf .../ai_proposal_system/.git` (내부 .git 삭제)
+  3. 일반 파일로 재추가
+- `.gitignore` 추가: `admin-server/.env`, `node_modules/`, `admin-client/build/`
+- 결과: `100644 blob` 모드로 실제 파일 50개 정상 커밋
+- 커밋: `f11c305` — 5차 수정
 
 ---
 
-## Phase 6 — QA/QC 전체 E2E 테스트
+## Phase 현황
 
-**상태**: 대기  
-**담당**: QA/QC Agent  
-**게이팅 조건**: 정상 흐름 3회 연속 성공 + 엣지 케이스 전체 통과
-
----
-
-## Phase 7 — iOS Release 빌드 및 배포 준비
-
-**상태**: 기초 완료 (Release 빌드 경험 있음)  
-**담당**: DevOps/Build Agent, Security Agent  
-**게이팅 조건**: Security 점검 통과, 실기기 무선 실행 확인
-
-**작업 목록**:
-- [ ] Security Agent 최종 점검 통과
-- [ ] Release 빌드 + 실기기 설치
-- [ ] Apple Developer 계정 서명 유효기간 확인
-- [ ] TestFlight 배포 검토 (선택)
+| Phase | 상태 | 완료일 |
+|---|---|---|
+| Phase 0: 프로젝트 분석 | ✅ 완료 | 2026-05-19 |
+| Phase 1: API 계약서 확정 | ✅ 완료 | 2026-05-19 |
+| Phase 2: Team C Admin 배포 | ✅ 완료 | 2026-05-19 (EC2 배포 완료, DB 연결) |
+| Phase 3: Team B ↔ Team C 연동 | ✅ 완료 | 2026-05-19 (userCode → DB 조회) |
+| Phase 4: Flutter 앱 AI 대화 E2E | 🔄 진행 중 | - |
+| Phase 5: Chromecast 실제 연동 | ⏳ 대기 | 하드웨어 준비 필요 |
+| Phase 6: QA/QC 전체 테스트 | ⏳ 대기 | - |
+| Phase 7: iOS 빌드 및 배포 준비 | 🔄 진행 중 | Release 빌드 완료, 보안 점검 진행 중 |

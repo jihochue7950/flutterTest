@@ -67,3 +67,19 @@ Phase 게이팅, 우선순위 관리, 팀 간 의존성 해소, 타임라인 유
 
 모든 에이전트와 협업합니다. PM Agent는 결정권자가 아니라 **조율자**입니다.  
 기술 결정은 해당 팀 에이전트가 내리며, PM Agent는 일정과 의존성을 관리합니다.
+
+---
+
+## 작업 이력
+
+| 날짜 | 작업 | 결과 |
+|---|---|---|
+| 2026-05-19 | 3팀 Harness 구조 설계 확정 (Team A/B/C + Cross-Team 4개) | ✅ 완료 |
+| 2026-05-19 | docs/ 문서 17개 생성 (agents × 10, teams × 3, shared × 2, timeline, plan) | ✅ 완료 |
+| 2026-05-19 | Phase 0~3 완료 판정 | ✅ 완료 |
+| 2026-05-20 | timeline.md 실제 작업 이력 소급 기록, 에이전트별 작업 이력 섹션 추가 | ✅ 완료 |
+
+### 현재 Phase 요약
+- **완료**: Phase 0(분석), Phase 1(계약서), Phase 2(Team C 배포), Phase 3(B↔C 연동)
+- **진행 중**: Phase 4(Flutter E2E), Phase 7(iOS 빌드)
+- **대기**: Phase 5(Chromecast), Phase 6(QA)

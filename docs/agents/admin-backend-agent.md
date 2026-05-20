@@ -104,3 +104,13 @@ MariaDB의 사용자, 영상, 질문 데이터를 관리하고, Team B가 호출
 | Admin Frontend Agent | API 엔드포인트 변경 시 `src/api/*.js` 동기화 |
 | Security Agent | JWT_SECRET 강도, bcrypt 라운드, API 인증 정책 |
 | DevOps/Build Agent | PM2 설정, 포트 충돌 확인 (8080 vs 3000 vs 4000) |
+
+---
+
+## 작업 이력
+
+| 날짜 | 작업 | 결과 |
+|---|---|---|
+| 2026-05-19 | EC2 `admin-server/.env` JWT_SECRET 실값 교체, SERVER_BASE_URL 설정 | ✅ 완료 |
+| 2026-05-19 | `GET /api/users/jihochu/proposal-data` 응답 검증 (영상 URL + 질문 반환 확인) | ✅ 완료 |
+| 2026-05-19 | PM2 `ai-proposal-admin` 프로세스 정상 운영 중 (uptime 4D+) | ✅ 운영 중 |

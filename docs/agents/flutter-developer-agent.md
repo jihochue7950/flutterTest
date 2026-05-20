@@ -80,3 +80,14 @@ Host(세션 생성자)와 User B(초대받은 사람) 모두가 사용하는 화
 | AI Flow Agent | `EventType` enum 추가/변경 시 `event_model.dart` 동기화 |
 | QA/QC Agent | 화면별 테스트 시나리오 제공 |
 | DevOps/Build Agent | 새 환경변수 추가 시 `app_config.dart`와 `env.*.json` 동시 반영 |
+
+---
+
+## 작업 이력
+
+| 날짜 | 작업 | 결과 |
+|---|---|---|
+| 2026-05-16 | `session_provider.dart`: 서버 성공 시 `_smsService` 직접 호출 제거, 로컬 폴백 유지 | ✅ 완료 |
+| 2026-05-18 | `session_model.dart`: `userCode` 필드 추가 (3차 수정 pull 반영) | ✅ 완료 |
+| 2026-05-18 | `session_create_screen.dart`: 영상 ID 입력 → 사용자 코드 입력 UI 개편 | ✅ 완료 |
+| 2026-05-18 | `session_provider.dart`: `createSession()` `userCode` 파라미터 추가 | ✅ 완료 |
