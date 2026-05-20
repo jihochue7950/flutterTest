@@ -8,6 +8,10 @@
  * ★ 환경변수:
  *   PORT_API, PORT_INVITE, PUBLIC_HOST, VIDEO_HOST
  *   DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+ *   OPENAI_API_KEY     → OpenAI Realtime API 음성 대화 (우선 사용)
+ *   ANTHROPIC_API_KEY  → Claude AI 텍스트 반응 (OPENAI 없을 때 폴백)
+ *
+ * ★ 우선순위: OPENAI_API_KEY > ANTHROPIC_API_KEY > 기본 반응
  *
  * ★ 실행:
  *   직접: PUBLIC_HOST=3.34.99.69 DB_PASSWORD=yourpw node server.js
@@ -35,6 +39,11 @@ const SOLAPI_API_KEY    = process.env.SOLAPI_API_KEY    || '';
 const SOLAPI_API_SECRET = process.env.SOLAPI_API_SECRET || '';
 const SOLAPI_FROM       = (process.env.SOLAPI_FROM || '').replace(/[^0-9]/g, '');
 
+// OpenAI Realtime API (우선)
+const OPENAI_API_KEY    = process.env.OPENAI_API_KEY    || '';
+// Anthropic Claude AI (폴백)
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+
 const DB_CONFIG = {
   host:               process.env.DB_HOST     || 'localhost',
   port:           parseInt(process.env.DB_PORT || '3306', 10),
@@ -47,11 +56,12 @@ const DB_CONFIG = {
 };
 
 // ── 기본 질문 (ai_questions 테이블에 커스텀 질문이 없을 때 사용) ───────────────
+// 질문 객체: { question_text, answer_type: 'open'|'closed', expected_answer }
 const DEFAULT_QUESTIONS = [
-  '오늘 이렇게 만나게 되어 정말 기쁩니다. 요즘 어떻게 지내셨나요?',
-  '처음 만났던 날을 기억하시나요? 그 때의 기억이 아직도 생생하신가요?',
-  '앞으로 함께 하고 싶은 일이 있다면 어떤 것인가요?',
-  '지금 이 순간 당신에게 가장 소중한 것은 무엇인가요?',
+  { question_text: '오늘 이렇게 만나게 되어 정말 기쁩니다. 요즘 어떻게 지내셨나요?',       answer_type: 'open',   expected_answer: null },
+  { question_text: '처음 만났던 날을 기억하시나요? 그 때의 기억이 아직도 생생하신가요?',   answer_type: 'open',   expected_answer: null },
+  { question_text: '앞으로 함께 하고 싶은 일이 있다면 어떤 것인가요?',                     answer_type: 'open',   expected_answer: null },
+  { question_text: '지금 이 순간 당신에게 가장 소중한 것은 무엇인가요?',                   answer_type: 'open',   expected_answer: null },
 ];
 
 const TTS_DELAY_PER_CHAR = 80;
@@ -61,6 +71,235 @@ const TTS_BASE_DELAY     = 1500;
 const sessions  = new Map(); // sessionId → session 객체
 const tokenMap  = new Map(); // inviteToken → sessionId
 const clientMap = new Map(); // sessionId → Set<WebSocket>
+
+// ── OpenAI Realtime API ───────────────────────────────────────────────────────
+
+function buildRealtimeSystemPrompt(questions) {
+  const qList = questions.map((q, i) => {
+    const aType    = q.answer_type     || 'open';
+    const expected = aType === 'closed' && q.expected_answer
+      ? ` (정답 키워드: ${q.expected_answer})` : '';
+    return `${i + 1}. [${aType}] ${q.question_text}${expected}`;
+  }).join('\n');
+
+  return `당신은 특별한 프로포즈 경험을 연출하는 따뜻한 AI 어시스턴트입니다. 반드시 한국어로만 대화합니다.
+
+아래 질문들을 순서대로 진행하세요:
+${qList}
+
+규칙:
+- 각 질문에 답변을 듣고 1~2문장으로 따뜻하게 반응한 뒤 다음 질문으로 자연스럽게 넘어가세요
+- [closed] 타입: 정답 키워드와 의미가 비슷하면 긍정 반응, 아니면 부드럽게 재도전 유도 (1회)
+- [open] 타입: 어떤 답이든 감동적으로 반응하고 다음으로 진행
+- 모든 질문이 끝나면 마무리 한마디 후 반드시 proposal_complete 함수를 호출하세요`;
+}
+
+/**
+ * User B 세션에 OpenAI Realtime API WebSocket 연결을 생성합니다.
+ * 연결되면 AI가 첫 번째 질문부터 자동으로 대화를 시작합니다.
+ * @returns {boolean} 연결 시작 성공 여부
+ */
+async function startRealtimeSession(sessionId, session) {
+  if (!OPENAI_API_KEY) return false;
+
+  const questions    = session.questions || DEFAULT_QUESTIONS;
+  const systemPrompt = buildRealtimeSystemPrompt(questions);
+
+  try {
+    const rtWs = new WebSocket(
+      'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
+      { headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'OpenAI-Beta': 'realtime=v1' } }
+    );
+
+    session.realtimeWs  = rtWs;
+    session.micActive   = false;
+    session.rtTextBuf   = '';
+
+    rtWs.on('open', () => {
+      log('🤖', `[RT] OpenAI Realtime 연결 [${sessionId.substring(0, 8)}...]`);
+
+      rtWs.send(JSON.stringify({
+        type: 'session.update',
+        session: {
+          modalities:   ['text'],
+          instructions: systemPrompt,
+          input_audio_format: 'pcm16',
+          input_audio_transcription: { model: 'whisper-1' },
+          // 수동 턴 감지: User B가 버튼 뗄 때 commit 신호 전송
+          turn_detection: null,
+          tools: [{
+            type: 'function', name: 'proposal_complete',
+            description: '모든 질문 완료 후 프로포즈 영상을 재생할 준비가 됐을 때 호출',
+            parameters: { type: 'object', properties: {}, required: [] },
+          }],
+          tool_choice: 'auto',
+        },
+      }));
+
+      // 500ms 후 AI가 첫 질문 시작
+      setTimeout(() => {
+        if (rtWs.readyState === WebSocket.OPEN) {
+          rtWs.send(JSON.stringify({ type: 'response.create' }));
+        }
+      }, 500);
+    });
+
+    rtWs.on('message', (raw) => {
+      try { handleRealtimeEvent(sessionId, session, rtWs, JSON.parse(raw.toString())); }
+      catch (_) {}
+    });
+
+    rtWs.on('error', (err) => log('❌', `[RT] 오류: ${err.message}`));
+    rtWs.on('close', () => {
+      log('🔌', `[RT] 연결 종료 [${sessionId.substring(0, 8)}...]`);
+      session.realtimeWs = null;
+    });
+
+    return true;
+  } catch (err) {
+    log('❌', `[RT] 시작 실패: ${err.message}`);
+    return false;
+  }
+}
+
+function handleRealtimeEvent(sessionId, session, rtWs, event) {
+  switch (event.type) {
+
+    // AI 텍스트 조각 수신 → 버퍼에 누적
+    case 'response.text.delta':
+      session.rtTextBuf = (session.rtTextBuf || '') + (event.delta || '');
+      break;
+
+    // AI 텍스트 완성 → TV로 aiSpeech 전송 (flutter_tts가 재생)
+    case 'response.text.done': {
+      const text = (event.text || '').trim();
+      if (text) {
+        log('🤖', `[RT] AI: "${text}"`);
+        broadcast(sessionId, makeEvent('aiSpeech', sessionId, { text }));
+        // 마이크는 TV TTS 완료 후 TV가 aiListening을 전송할 때 활성화
+      }
+      session.rtTextBuf = '';
+      break;
+    }
+
+    // AI가 proposal_complete 함수 호출 → 영상 재생
+    case 'response.function_call_arguments.done':
+      if (event.name === 'proposal_complete') {
+        log('🎉', '[RT] proposal_complete → 영상 재생');
+        rtHandleProposalComplete(sessionId, session, rtWs);
+      }
+      break;
+
+    // User B 음성 인식 완료 → 로그 + 화면에 표시
+    case 'conversation.item.input_audio_transcription.completed': {
+      const transcript = (event.transcript || '').trim();
+      if (transcript) {
+        log('💬', `[RT] User B: "${transcript}"`);
+        broadcast(sessionId, makeEvent('userBSpeech', sessionId, { text: transcript }));
+      }
+      break;
+    }
+
+    case 'input_audio_buffer.speech_started':
+      log('🎙️', '[RT] 말하기 시작');
+      break;
+
+    case 'error':
+      log('❌', `[RT] API 오류: ${JSON.stringify(event.error)}`);
+      break;
+  }
+}
+
+async function rtHandleProposalComplete(sessionId, session, rtWs) {
+  const videoUrl = await getUserVideoUrl(session.userCode) || null;
+  log('🎬', `[RT] 영상: ${videoUrl}`);
+  broadcast(sessionId, makeEvent('videoPlayRequested', sessionId, {
+    videoUrl, userCode: session.userCode,
+  }));
+  console.log('\n' + '='.repeat(58));
+  console.log(`🎉 프로포즈 완료! userCode: ${session.userCode}`);
+  console.log('='.repeat(58) + '\n');
+  if (rtWs && rtWs.readyState === WebSocket.OPEN) rtWs.close();
+}
+
+// ── Claude AI (폴백) ──────────────────────────────────────────────────────────
+let anthropic = null;
+
+function initAi() {
+  if (!ANTHROPIC_API_KEY) {
+    log('⚠️', 'ANTHROPIC_API_KEY 없음 → AI 반응 기본값 사용');
+    return;
+  }
+  try {
+    const { Anthropic } = require('@anthropic-ai/sdk');
+    anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+    log('🤖', 'Claude AI 초기화 완료');
+  } catch (e) {
+    log('⚠️', `Claude AI 초기화 실패: ${e.message}`);
+  }
+}
+
+/**
+ * AI가 사용자 답변에 자연스럽게 반응하고 다음 질문으로 이동 여부를 결정합니다.
+ * answer_type='open'  → 항상 다음으로 진행
+ * answer_type='closed' → 정답과 비교 후 결정 (1회 오답 시 재시도, 2회차 무조건 진행)
+ *
+ * @returns {Promise<{response: string, moveToNext: boolean}>}
+ */
+async function generateAiReaction(question, answer, conversationHistory) {
+  const qText    = question.question_text;
+  const aType    = question.answer_type    || 'open';
+  const expected = question.expected_answer || null;
+
+  if (!anthropic) {
+    // API 키 없을 때 기본 반응
+    const defaults = {
+      open:   '정말 소중한 이야기네요! 감사합니다.',
+      closed: aType === 'closed' ? '오! 기억하는군요, 정말 대단해요!' : '감사합니다.',
+    };
+    return { response: defaults[aType] || defaults.open, moveToNext: true };
+  }
+
+  const systemPrompt = `당신은 특별한 프로포즈 경험을 연출하는 따뜻한 AI 어시스턴트입니다.
+반드시 아래 JSON 형식으로만 응답하세요: {"response":"한국어 반응","moveToNext":true}
+
+[현재 질문] ${qText}
+[답변 유형] ${aType}${expected ? `\n[정답 키워드] ${expected}` : ''}
+
+규칙:
+- response: 1~2문장, 따뜻하고 감동적인 한국어, 과하지 않게
+- answer_type이 'open' → 어떤 답이든 moveToNext: true
+- answer_type이 'closed' → 답변이 정답 키워드와 의미상 일치하면 true, 아니면 false (재도전 유도)
+- 오답 반응: 차갑지 않게, 예) "음... 다시 한번 생각해볼까요? 힌트를 드리자면..."
+- JSON 외 다른 텍스트 절대 출력 금지`;
+
+  const messages = [
+    ...conversationHistory.slice(-6),
+    { role: 'user', content: `사용자 답변: "${answer}"` },
+  ];
+
+  try {
+    const resp = await anthropic.messages.create({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system:     systemPrompt,
+      messages,
+    });
+    const raw       = resp.content[0].text.trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        response:   String(parsed.response || '감사합니다.'),
+        moveToNext: Boolean(parsed.moveToNext),
+      };
+    }
+    return { response: raw.slice(0, 120), moveToNext: true };
+  } catch (err) {
+    log('❌', `Claude AI 오류: ${err.message}`);
+    return { response: '감사합니다! 다음 이야기로 넘어가 볼게요.', moveToNext: true };
+  }
+}
 
 // ── MariaDB ───────────────────────────────────────────────────────────────────
 let pool = null;
@@ -89,7 +328,7 @@ async function getUserQuestions(userCode) {
 
   try {
     const [rows] = await pool.query(
-      `SELECT question_text
+      `SELECT question_text, answer_type, expected_answer
        FROM   ai_questions
        WHERE  user_code = ? AND is_active = 1
        ORDER BY sort_order ASC, id ASC`,
@@ -101,7 +340,11 @@ async function getUserQuestions(userCode) {
       return [...DEFAULT_QUESTIONS];
     }
 
-    const questions = rows.map(r => r.question_text);
+    const questions = rows.map(r => ({
+      question_text:   r.question_text,
+      answer_type:     r.answer_type     || 'open',
+      expected_answer: r.expected_answer || null,
+    }));
     log('💬', `user_code=${userCode} 커스텀 질문 ${questions.length}개 로드`);
     return questions;
   } catch (err) {
@@ -251,12 +494,53 @@ function handleWsEvent(sessionId, event) {
       handleUserBJoined(sessionId, session);
       break;
 
+    // TV TTS 완료 신호 → 마이크 활성화 후 전체 브로드캐스트
     case 'aiListening':
+      if (session.realtimeWs && session.realtimeWs.readyState === WebSocket.OPEN) {
+        session.micActive = true;
+      }
       broadcast(sessionId, makeEvent('aiListening', sessionId));
       break;
 
+    // User B 음성 청크 → OpenAI Realtime으로 릴레이
+    case 'audioChunk':
+      if (session.realtimeWs
+          && session.realtimeWs.readyState === WebSocket.OPEN
+          && session.micActive
+          && event.data) {
+        session.realtimeWs.send(JSON.stringify({
+          type:  'input_audio_buffer.append',
+          audio: event.data, // base64 PCM16 24kHz mono
+        }));
+      }
+      break;
+
+    // User B 버튼 뗌 → 오디오 버퍼 커밋 + AI 응답 요청
+    case 'audioCommit':
+      if (session.realtimeWs && session.realtimeWs.readyState === WebSocket.OPEN) {
+        session.micActive = false;
+        session.realtimeWs.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+        session.realtimeWs.send(JSON.stringify({ type: 'response.create' }));
+        log('🎙️', '[RT] 오디오 커밋 → AI 응답 요청');
+      }
+      break;
+
+    // 텍스트 폴백 (마이크 없는 환경 or Realtime API 미사용 시)
     case 'userBSpeech':
-      handleUserBSpeech(sessionId, session, event.data?.text);
+      if (session.realtimeWs && session.realtimeWs.readyState === WebSocket.OPEN) {
+        // Realtime API 사용 중: 텍스트를 conversation item으로 주입
+        session.realtimeWs.send(JSON.stringify({
+          type: 'conversation.item.create',
+          item: {
+            type: 'message', role: 'user',
+            content: [{ type: 'input_text', text: event.data?.text || '' }],
+          },
+        }));
+        session.realtimeWs.send(JSON.stringify({ type: 'response.create' }));
+      } else {
+        // Realtime API 없음: 기존 텍스트 기반 흐름
+        handleUserBSpeech(sessionId, session, event.data?.text);
+      }
       break;
   }
 }
@@ -270,6 +554,8 @@ function handleWsEvent(sessionId, event) {
 async function handleUserBJoined(sessionId, session) {
   if (session.userBJoined) return;
   session.userBJoined = true;
+  session.conversationHistory = [];
+  session.retryCount = 0;
 
   log('👋', `User B 접속! [userCode: ${session.userCode}]`);
   broadcast(sessionId, makeEvent('userBJoined', sessionId));
@@ -280,16 +566,26 @@ async function handleUserBJoined(sessionId, session) {
 
   log('📋', `질문 ${questions.length}개 준비 완료`);
 
-  // 1초 후 첫 번째 질문 전송
+  // OpenAI Realtime API 사용 시: AI가 직접 대화를 시작
+  if (OPENAI_API_KEY) {
+    const started = await startRealtimeSession(sessionId, session);
+    if (started) {
+      log('🤖', '[RT] Realtime API로 대화 시작');
+      return; // Realtime이 첫 질문을 전송함
+    }
+  }
+
+  // 폴백: 기존 텍스트 기반 흐름 (Claude or 기본 반응)
   setTimeout(() => {
-    const q = session.questions[0];
+    const q    = session.questions[0];
+    const qText = q.question_text;
     session.currentQuestion = 0;
-    log('🤖', `질문 1/${session.questions.length}: "${q}"`);
-    broadcast(sessionId, makeEvent('aiSpeech', sessionId, { text: q }));
+    log('🤖', `질문 1/${session.questions.length}: "${qText}"`);
+    broadcast(sessionId, makeEvent('aiSpeech', sessionId, { text: qText }));
 
     setTimeout(() => {
       broadcast(sessionId, makeEvent('aiListening', sessionId));
-    }, ttsDelay(q));
+    }, ttsDelay(qText));
   }, 1000);
 }
 
@@ -302,52 +598,88 @@ async function handleUserBJoined(sessionId, session) {
 async function handleUserBSpeech(sessionId, session, text) {
   if (!text || text.trim() === '') return;
 
-  session.answers = session.answers || [];
-  session.answers.push(text.trim());
-  const count    = session.answers.length;
-  const total    = (session.questions || DEFAULT_QUESTIONS).length;
+  const trimmed    = text.trim();
+  const questions  = session.questions || DEFAULT_QUESTIONS;
+  const currentIdx = session.currentQuestion;
+  const currentQ   = questions[currentIdx];
+  const total      = questions.length;
 
-  log('💬', `답변 ${count}/${total}: "${text}"`);
+  session.conversationHistory = session.conversationHistory || [];
+  session.retryCount = session.retryCount !== undefined ? session.retryCount : 0;
 
-  if (count < total) {
-    // 다음 질문
-    const nextQ = session.questions[count];
-    setTimeout(() => {
-      log('🤖', `질문 ${count + 1}/${total}: "${nextQ}"`);
-      broadcast(sessionId, makeEvent('aiSpeech', sessionId, { text: nextQ }));
+  log('💬', `답변 [${currentIdx + 1}/${total}] (retry:${session.retryCount}): "${trimmed}"`);
+
+  // Claude AI로 자연스러운 반응 생성
+  const { response: aiReaction, moveToNext } = await generateAiReaction(
+    currentQ, trimmed, session.conversationHistory
+  );
+
+  // 대화 이력 갱신
+  session.conversationHistory.push(
+    { role: 'user',      content: trimmed    },
+    { role: 'assistant', content: aiReaction },
+  );
+
+  // closed 질문: 재시도 1회 소진 시 무조건 진행
+  const shouldAdvance = moveToNext || session.retryCount >= 1;
+
+  setTimeout(async () => {
+    broadcast(sessionId, makeEvent('aiSpeech', sessionId, { text: aiReaction }));
+
+    if (shouldAdvance) {
+      session.answers = session.answers || [];
+      session.answers.push(trimmed);
+      session.retryCount = 0;
+
+      const nextIdx = session.answers.length;
+
+      if (nextIdx < total) {
+        // 다음 질문: AI 반응 TTS 완료 후 전송
+        setTimeout(() => {
+          const nextQ    = questions[nextIdx];
+          const nextText = nextQ.question_text;
+          session.currentQuestion = nextIdx;
+          log('🤖', `질문 ${nextIdx + 1}/${total}: "${nextText}"`);
+          broadcast(sessionId, makeEvent('aiSpeech', sessionId, { text: nextText }));
+          setTimeout(() => {
+            broadcast(sessionId, makeEvent('aiListening', sessionId));
+          }, ttsDelay(nextText));
+        }, ttsDelay(aiReaction));
+
+      } else {
+        // 모든 질문 완료 → 마무리 멘트 + 영상
+        const closing =
+          '정말 감사합니다. 소중한 이야기를 나눠주셔서 행복했습니다. ' +
+          '이제 특별히 준비한 영상을 보여드리겠습니다.';
+
+        setTimeout(async () => {
+          log('🎤', '마무리 멘트 전송');
+          broadcast(sessionId, makeEvent('aiSpeech', sessionId, { text: closing }));
+
+          const videoUrl = await getUserVideoUrl(session.userCode) || null;
+          log('🎬', `영상 URL: ${videoUrl}`);
+
+          setTimeout(() => {
+            broadcast(sessionId, makeEvent('videoPlayRequested', sessionId, {
+              videoUrl,
+              userCode: session.userCode,
+            }));
+            console.log('\n' + '='.repeat(58));
+            console.log(`🎉 프로포즈 완료! userCode: ${session.userCode}`);
+            console.log(`   영상: ${videoUrl}`);
+            console.log('='.repeat(58) + '\n');
+          }, ttsDelay(closing));
+        }, ttsDelay(aiReaction));
+      }
+
+    } else {
+      // 오답 → 재시도 카운트 증가, TTS 후 입력 재활성화
+      session.retryCount++;
       setTimeout(() => {
         broadcast(sessionId, makeEvent('aiListening', sessionId));
-      }, ttsDelay(nextQ));
-    }, 800);
-
-  } else {
-    // 모든 질문 완료 → 마무리 멘트 + DB에서 영상 URL 조회
-    const closing =
-      '정말 감사합니다. 소중한 이야기를 나눠주셔서 행복했습니다. ' +
-      '이제 특별히 준비한 영상을 보여드리겠습니다.';
-
-    setTimeout(async () => {
-      log('🎤', '마무리 멘트 전송');
-      broadcast(sessionId, makeEvent('aiSpeech', sessionId, { text: closing }));
-
-      // user_code로 DB에서 영상 URL 조회
-      const videoUrl = await getUserVideoUrl(session.userCode)
-                    || 'assets/video/proposal.mp4';
-
-      log('🎬', `영상 URL: ${videoUrl}`);
-
-      setTimeout(() => {
-        broadcast(sessionId, makeEvent('videoPlayRequested', sessionId, {
-          videoUrl,
-          userCode: session.userCode,
-        }));
-        console.log('\n' + '='.repeat(58));
-        console.log(`🎉 프로포즈 완료! userCode: ${session.userCode}`);
-        console.log(`   영상: ${videoUrl}`);
-        console.log('='.repeat(58) + '\n');
-      }, ttsDelay(closing));
-    }, 800);
-  }
+      }, ttsDelay(aiReaction));
+    }
+  }, 800);
 }
 
 // ── HTTP API 서버 ─────────────────────────────────────────────────────────────
@@ -427,7 +759,7 @@ const apiServer = http.createServer((req, res) => {
         if (s.userBPhone) {
           const title = s.title ? `[${s.title}] ` : '';
           const smsText = `💍 ${title}특별한 초대장이 도착했어요!\n\n지금 바로 확인하세요 👇\n${inviteUrl}`;
-          sendSolapiSms({ to: s.userBPhone, text: smsText }).catch(() => {});
+          sendSolapiSms({ to: s.userBPhone, text: smsText }).catch(err => log('❌', `SMS 백그라운드 오류: ${err.message}`));
         }
 
         console.log('\n' + '═'.repeat(58));
@@ -474,6 +806,7 @@ const apiServer = http.createServer((req, res) => {
           db: pool ? 'connected' : 'disconnected',
           sessions: sessions.size,
           uptime: Math.floor(process.uptime()),
+          adminServerUrl: process.env.ADMIN_SERVER_URL || null,
         }));
         return;
       }
@@ -521,6 +854,12 @@ invitePageServer.listen(INVITE_PORT, '0.0.0.0', () => {
 
 // ── 서버 시작 ─────────────────────────────────────────────────────────────────
 (async () => {
+  if (OPENAI_API_KEY) {
+    log('✅', 'OPENAI_API_KEY 확인 → Realtime API 음성 대화 모드');
+  } else {
+    log('⚠️', 'OPENAI_API_KEY 없음 → Claude 또는 기본 반응 폴백');
+    initAi();
+  }
   await initDb();
   apiServer.listen(API_PORT, '0.0.0.0', () => {
     log('🚀', `API + WS: http://${PUBLIC_HOST}:${API_PORT}`);
@@ -540,84 +879,265 @@ function buildInviteHtml(token, apiBase, wsBase) {
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 어시스턴트 💍</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>특별한 초대 💍</title>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;overflow:hidden}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-         background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;flex-direction:column}
-    .header{background:rgba(255,255,255,.15);backdrop-filter:blur(10px);padding:16px 20px;color:#fff;display:flex;align-items:center;gap:12px}
-    .avatar{width:52px;height:52px;background:rgba(255,255,255,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px}
-    .hinfo h2{font-size:16px;font-weight:600}.hinfo p{font-size:12px;opacity:.8;margin-top:2px}
-    .dot{width:9px;height:9px;border-radius:50%;background:#f59e0b;transition:background .3s;margin-left:auto}
-    .chat{flex:1;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;max-height:calc(100vh - 200px)}
-    .bubble{max-width:78%;padding:14px 18px;border-radius:18px;font-size:15px;line-height:1.55;animation:fu .3s ease}
-    @keyframes fu{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-    .bubble.ai{background:rgba(255,255,255,.92);color:#333;border-bottom-left-radius:4px;align-self:flex-start}
-    .bubble.me{background:#E91E8C;color:#fff;border-bottom-right-radius:4px;align-self:flex-end}
-    .typing{display:flex;gap:5px;padding:14px 18px;background:rgba(255,255,255,.92);border-radius:18px;border-bottom-left-radius:4px;align-self:flex-start}
-    .typing span{width:8px;height:8px;background:#aaa;border-radius:50%;animation:bounce .9s infinite}
-    .typing span:nth-child(2){animation-delay:.3s}.typing span:nth-child(3){animation-delay:.6s}
-    @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-    .input-area{background:#fff;padding:18px 20px 36px;border-radius:28px 28px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.1)}
-    .hint{text-align:center;color:#888;font-size:13px;font-weight:500;margin-bottom:16px}
-    .input-row{display:flex;gap:10px;align-items:center}
-    input{flex:1;padding:14px 18px;border:2px solid #e0e0e0;border-radius:24px;font-size:15px;outline:none;transition:border-color .2s}
-    input:focus{border-color:#6C63FF}input:disabled{background:#f5f5f5;color:#bbb}
-    button{width:52px;height:52px;border-radius:50%;border:none;background:#6C63FF;color:#fff;font-size:22px;cursor:pointer;transition:background .2s;flex-shrink:0}
-    button:hover{background:#5a52d5}button:disabled{background:#ddd;cursor:not-allowed}
-    .proposal{display:none;flex-direction:column;align-items:center;justify-content:center;
-              min-height:100vh;background:linear-gradient(180deg,#1A0030,#3D0060);color:#fff;text-align:center;padding:40px 32px}
-    .proposal.show{display:flex}
-    .heart{font-size:88px;animation:hb .9s infinite alternate}
-    @keyframes hb{from{transform:scale(1)}to{transform:scale(1.13)}}
-    .pmsg{font-size:18px;font-weight:300;line-height:1.75;margin:36px 0}
-    .tvhint{padding:12px 24px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:30px;font-size:14px}
-    .emojis{margin-top:20px;font-size:30px;letter-spacing:8px}
+         background:linear-gradient(160deg,#0f0c29,#302b63,#24243e);
+         display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+         min-height:100vh;color:#fff;padding:0 20px 40px}
+
+    /* ── 상단 상태바 ── */
+    .topbar{width:100%;display:flex;align-items:center;justify-content:center;
+            padding:18px 0 10px;gap:8px}
+    .dot-live{width:8px;height:8px;border-radius:50%;background:#f59e0b;
+              transition:background .4s}
+    .dot-live.on{background:#4ade80;animation:blink 2s infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+    .status-text{font-size:13px;opacity:.75;letter-spacing:.5px}
+
+    /* ── AI 말풍선 ── */
+    .ai-bubble{width:100%;max-width:440px;margin:8px auto;padding:18px 22px;
+               background:rgba(255,255,255,.1);backdrop-filter:blur(12px);
+               border:1px solid rgba(255,255,255,.18);border-radius:20px;
+               font-size:16px;line-height:1.6;text-align:center;min-height:64px;
+               transition:opacity .4s;opacity:0}
+    .ai-bubble.show{opacity:1}
+    .ai-bubble.typing::after{content:'...';animation:dots 1.2s infinite}
+    @keyframes dots{0%{content:'•'}33%{content:'••'}66%{content:'•••'}100%{content:'•'}}
+
+    /* ── 내 발화 말풍선 ── */
+    .my-bubble{width:100%;max-width:440px;margin:6px auto;padding:12px 20px;
+               background:rgba(233,30,140,.25);border:1px solid rgba(233,30,140,.4);
+               border-radius:20px;font-size:15px;line-height:1.5;text-align:center;
+               animation:fadeup .3s ease;display:none}
+    @keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+    /* ── 중앙 마이크 버튼 영역 ── */
+    .mic-area{display:flex;flex-direction:column;align-items:center;gap:18px;flex:1;
+              justify-content:center;width:100%}
+
+    .mic-hint{font-size:14px;opacity:.6;letter-spacing:.3px;transition:opacity .3s}
+    .mic-hint.active{opacity:1;color:#f472b6}
+
+    /* 마이크 버튼 */
+    .mic-btn{width:140px;height:140px;border-radius:50%;border:none;cursor:pointer;
+             background:linear-gradient(145deg,#6C63FF,#E91E8C);
+             display:flex;align-items:center;justify-content:center;
+             box-shadow:0 0 0 0 rgba(233,30,140,0);
+             transition:transform .15s,box-shadow .15s;
+             touch-action:none;user-select:none;-webkit-user-select:none;position:relative}
+    .mic-btn:disabled{background:linear-gradient(145deg,#444,#555);cursor:not-allowed;opacity:.5}
+    .mic-btn.recording{transform:scale(1.08);
+                       box-shadow:0 0 0 20px rgba(233,30,140,.2),0 0 0 40px rgba(233,30,140,.08)}
+    .mic-btn.recording::after{content:'';position:absolute;inset:-10px;border-radius:50%;
+                              border:2px solid rgba(233,30,140,.5);
+                              animation:ripple 1s infinite}
+    @keyframes ripple{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.4);opacity:0}}
+    .mic-icon{font-size:56px;pointer-events:none}
+
+    /* ── 텍스트 폴백 (하단, 작게) ── */
+    .text-fallback{width:100%;max-width:440px;display:flex;gap:8px;margin-top:8px}
+    .text-fallback input{flex:1;padding:10px 16px;border:1px solid rgba(255,255,255,.2);
+                          border-radius:24px;background:rgba(255,255,255,.08);color:#fff;
+                          font-size:14px;outline:none}
+    .text-fallback input::placeholder{color:rgba(255,255,255,.4)}
+    .text-fallback input:disabled{opacity:.4}
+    .text-fallback button{padding:10px 16px;border:none;border-radius:24px;
+                           background:rgba(255,255,255,.15);color:#fff;
+                           font-size:13px;cursor:pointer}
+    .text-fallback button:disabled{opacity:.3;cursor:not-allowed}
+
+    /* ── 프로포즈 화면 ── */
+    #proposal{display:none;position:fixed;inset:0;
+              background:linear-gradient(180deg,#1A0030,#3D0060);
+              flex-direction:column;align-items:center;justify-content:center;
+              text-align:center;padding:40px 32px}
+    #proposal.show{display:flex;animation:fadeIn .8s ease}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    .heart{font-size:80px;animation:hb .9s infinite alternate;margin-bottom:28px}
+    @keyframes hb{from{transform:scale(1)}to{transform:scale(1.15)}}
+    #pmsg{font-size:18px;font-weight:300;line-height:1.8;margin-bottom:28px;max-width:400px}
+    .tv-hint{padding:10px 24px;background:rgba(255,255,255,.1);
+             border:1px solid rgba(255,255,255,.2);border-radius:30px;font-size:14px}
   </style>
 </head>
 <body>
-  <div id="main" style="display:flex;flex-direction:column;min-height:100vh">
-    <div class="header">
-      <div class="avatar" id="ai">✨</div>
-      <div class="hinfo"><h2>AI 어시스턴트</h2><p id="st">연결 중...</p></div>
-      <div class="dot" id="dot"></div>
-    </div>
-    <div class="chat" id="chat"><div class="bubble ai">안녕하세요! 잠시 후 AI와 대화가 시작됩니다...</div></div>
-    <div class="input-area">
-      <p class="hint" id="hint">연결 중입니다...</p>
-      <div class="input-row">
-        <input id="inp" type="text" placeholder="여기에 답변을 입력하세요" disabled/>
-        <button id="btn" disabled onclick="send()">&#10148;</button>
-      </div>
-    </div>
+
+  <!-- 상태바 -->
+  <div class="topbar">
+    <div class="dot-live" id="dot"></div>
+    <span class="status-text" id="st">연결 중...</span>
   </div>
-  <div class="proposal" id="proposal">
+
+  <!-- AI 말풍선 -->
+  <div class="ai-bubble" id="aiBubble">잠시 후 AI가 대화를 시작합니다...</div>
+
+  <!-- 내 발화 표시 -->
+  <div class="my-bubble" id="myBubble"></div>
+
+  <!-- 마이크 버튼 중앙 -->
+  <div class="mic-area">
+    <p class="mic-hint" id="micHint">AI가 준비 중입니다...</p>
+    <button class="mic-btn" id="micBtn" disabled>
+      <span class="mic-icon">🎙️</span>
+    </button>
+    <p class="mic-hint" id="micSub" style="font-size:12px;margin-top:-8px">
+      누르고 말하기 · 손 떼면 전송
+    </p>
+  </div>
+
+  <!-- 텍스트 폴백 -->
+  <div class="text-fallback">
+    <input id="inp" type="text" placeholder="텍스트로 답변하기..." disabled/>
+    <button id="sendBtn" disabled>전송</button>
+  </div>
+
+  <!-- 프로포즈 화면 -->
+  <div id="proposal">
     <div class="heart">💕</div>
-    <p class="pmsg" id="pmsg"></p>
-    <div class="tvhint">📺 TV 화면을 봐주세요</div>
-    <div class="emojis">🌸 💍 🌸</div>
+    <p id="pmsg"></p>
+    <div class="tv-hint">📺 TV 화면을 봐주세요</div>
   </div>
+
 <script>
 const TOKEN='${token}', API='${apiBase}', WSU='${wsBase}';
-let ws,sid,canSend=false,lastMsg='';
-function addBubble(t,ai){const c=document.getElementById('chat'),d=document.createElement('div');d.className='bubble '+(ai?'ai':'me');d.textContent=t;c.appendChild(d);c.scrollTop=c.scrollHeight;}
-function showTyping(){removeTyping();const c=document.getElementById('chat'),d=document.createElement('div');d.id='ty';d.className='typing';d.innerHTML='<span></span><span></span><span></span>';c.appendChild(d);c.scrollTop=c.scrollHeight;}
-function removeTyping(){const t=document.getElementById('ty');if(t)t.remove();}
-function setStatus(t,on){document.getElementById('st').textContent=t;document.getElementById('dot').style.background=on?'#4ade80':'#f59e0b';document.getElementById('ai').textContent=on?'🤖':'✨';}
-function setInput(en,h){document.getElementById('inp').disabled=!en;document.getElementById('btn').disabled=!en;document.getElementById('hint').textContent=h;canSend=en;if(en)document.getElementById('inp').focus();}
-function send(){if(!canSend)return;const inp=document.getElementById('inp'),text=inp.value.trim();if(!text)return;addBubble(text,false);inp.value='';setInput(false,'AI가 생각 중입니다...');showTyping();ws.send(JSON.stringify({type:'userBSpeech',sessionId:sid,data:{text},timestamp:new Date().toISOString()}));}
-document.getElementById('inp').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
-async function init(){
-  try{const r=await fetch(API+'/sessions/invite/'+TOKEN);const d=await r.json();sid=d.sessionId;}catch(_){sid=TOKEN;}
-  ws=new WebSocket(WSU+'/sessions/'+sid+'/ws');
-  ws.onopen=()=>{setStatus('연결됨',true);setInput(false,'AI가 준비 중입니다...');ws.send(JSON.stringify({type:'userBJoined',sessionId:sid,data:{},timestamp:new Date().toISOString()}));};
-  ws.onmessage=e=>{const ev=JSON.parse(e.data);
-    if(ev.type==='aiSpeech'){removeTyping();lastMsg=ev.data?.text||'';addBubble(lastMsg,true);setStatus('AI 말하는 중...',true);setInput(false,'AI가 말하는 중입니다...');}
-    if(ev.type==='aiListening'){setStatus('지금 말씀하세요',true);setInput(true,'답변을 입력하고 Enter 또는 ▶ 버튼을 누르세요');}
-    if(ev.type==='videoPlayRequested'){document.getElementById('main').style.display='none';document.getElementById('pmsg').textContent=lastMsg;document.getElementById('proposal').classList.add('show');}
+let ws, sid, lastMsg='', canTalk=false;
+
+/* ── UI ── */
+const $ = id => document.getElementById(id);
+function setStatus(t,on){$('st').textContent=t;$('dot').className='dot-live'+(on?' on':'');}
+function setAiBubble(t,typing=false){
+  const b=$('aiBubble');
+  b.textContent=t; b.className='ai-bubble show'+(typing?' typing':'');
+}
+function showMyBubble(t){
+  const b=$('myBubble'); b.textContent=t; b.style.display='block';
+}
+function hideMyBubble(){$('myBubble').style.display='none';}
+function setMicActive(active){
+  canTalk=active;
+  const btn=$('micBtn');
+  btn.disabled=!active;
+  $('micHint').textContent=active?'버튼을 누르고 말씀하세요':'AI가 말하는 중...';
+  $('micHint').className='mic-hint'+(active?' active':'');
+  $('inp').disabled=!active;
+  $('sendBtn').disabled=!active;
+}
+
+/* ── 텍스트 폴백 ── */
+function sendText(){
+  const t=$('inp').value.trim(); if(!t||!ws) return;
+  showMyBubble(t); $('inp').value='';
+  setMicActive(false); setAiBubble('AI가 생각 중입니다...', true);
+  ws.send(JSON.stringify({type:'userBSpeech',sessionId:sid,data:{text:t},timestamp:new Date().toISOString()}));
+}
+$('sendBtn').onclick=sendText;
+$('inp').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();sendText();}};
+
+/* ── PCM16 스트리밍 (push-to-talk) ── */
+let audioCtx=null, processor=null, micStream=null, micOn=false;
+
+async function ensureMicStream(){
+  if(micStream) return true;
+  try{
+    micStream=await navigator.mediaDevices.getUserMedia(
+      {audio:{channelCount:1,sampleRate:24000,echoCancellation:true,noiseSuppression:true}});
+    return true;
+  }catch(e){
+    console.warn('마이크 권한 오류:',e);
+    setStatus('마이크 권한 필요',false);
+    return false;
+  }
+}
+
+async function startRecording(){
+  if(micOn||!canTalk) return;
+  if(!await ensureMicStream()) return;
+  audioCtx=new AudioContext({sampleRate:24000});
+  const src=audioCtx.createMediaStreamSource(micStream);
+  processor=audioCtx.createScriptProcessor(4096,1,1);
+  processor.onaudioprocess=e=>{
+    if(!micOn||!ws||ws.readyState!==1) return;
+    const f32=e.inputBuffer.getChannelData(0);
+    const i16=new Int16Array(f32.length);
+    for(let i=0;i<f32.length;i++){const s=Math.max(-1,Math.min(1,f32[i]));i16[i]=s<0?s*0x8000:s*0x7FFF;}
+    const bytes=new Uint8Array(i16.buffer);
+    let bin=''; bytes.forEach(b=>bin+=String.fromCharCode(b));
+    ws.send(JSON.stringify({type:'audioChunk',sessionId:sid,data:btoa(bin)}));
   };
-  ws.onclose=()=>setStatus('연결 끊김',false);ws.onerror=()=>setStatus('연결 오류',false);
+  src.connect(processor); processor.connect(audioCtx.destination);
+  micOn=true;
+  $('micBtn').classList.add('recording');
+  setStatus('말씀하세요 🔴',true);
+}
+
+function stopRecording(){
+  if(!micOn) return;
+  micOn=false;
+  $('micBtn').classList.remove('recording');
+  if(processor){processor.disconnect();processor=null;}
+  if(audioCtx){audioCtx.close();audioCtx=null;}
+  if(ws&&ws.readyState===1){
+    ws.send(JSON.stringify({type:'audioCommit',sessionId:sid}));
+    setAiBubble('AI가 생각 중입니다...', true);
+    setMicActive(false);
+    setStatus('처리 중...',true);
+  }
+}
+
+/* ── 마이크 버튼 이벤트 (터치 + 마우스) ── */
+const btn=$('micBtn');
+btn.addEventListener('mousedown',e=>{e.preventDefault();startRecording();});
+btn.addEventListener('touchstart',e=>{e.preventDefault();startRecording();},{passive:false});
+btn.addEventListener('mouseup',stopRecording);
+btn.addEventListener('touchend',stopRecording);
+btn.addEventListener('mouseleave',()=>{if(micOn)stopRecording();});
+btn.addEventListener('touchcancel',()=>{if(micOn)stopRecording();});
+
+/* ── WebSocket 이벤트 ── */
+function onMsg(ev){
+  const e=JSON.parse(ev.data);
+  if(e.type==='aiSpeech'){
+    const t=e.data?.text||'';
+    lastMsg=t; setAiBubble(t); hideMyBubble();
+    setMicActive(false); setStatus('AI 말하는 중...',true);
+  }
+  if(e.type==='aiListening'){
+    setMicActive(true); setStatus('내 차례',true);
+    setAiBubble(lastMsg); // AI 마지막 말 유지
+  }
+  if(e.type==='userBSpeech'&&e.data?.text){
+    showMyBubble(e.data.text); // OpenAI가 인식한 내 발화
+  }
+  if(e.type==='videoPlayRequested'){
+    stopRecording(); micStream?.getTracks().forEach(t=>t.stop());
+    $('proposal').classList.add('show');
+    $('pmsg').textContent=lastMsg||'정말 고마워요 💕';
+  }
+}
+
+/* ── 초기화 ── */
+async function init(){
+  try{
+    const r=await fetch(API+'/sessions/invite/'+TOKEN);
+    const d=await r.json();
+    sid=d.sessionId||TOKEN;  // ★ fallback: sessionId 없으면 TOKEN 사용
+  }catch(_){ sid=TOKEN; }
+
+  ws=new WebSocket(WSU+'/sessions/'+sid+'/ws');
+  ws.onopen=()=>{
+    setStatus('연결됨',true);
+    setAiBubble('연결됐어요! AI가 곧 시작합니다 ✨');
+    ws.send(JSON.stringify({type:'userBJoined',sessionId:sid,data:{},timestamp:new Date().toISOString()}));
+    // 마이크 권한 미리 요청 (첫 AI 발화 전에)
+    ensureMicStream();
+  };
+  ws.onmessage=onMsg;
+  ws.onclose=()=>setStatus('연결 끊김',false);
+  ws.onerror=()=>setStatus('연결 오류',false);
 }
 init();
 </script>

@@ -6,13 +6,15 @@ export default function QuestionForm({ initialData, onSubmit, onCancel, loading 
   const [form, setForm] = useState({
     question_type: 'custom',
     question_text: '',
+    answer_type: 'open',
+    expected_answer: '',
     sort_order: 0,
     is_active: 1,
     ...initialData,
   });
 
   useEffect(() => {
-    if (initialData) setForm({ question_type: 'custom', question_text: '', sort_order: 0, is_active: 1, ...initialData });
+    if (initialData) setForm({ question_type: 'custom', question_text: '', answer_type: 'open', expected_answer: '', sort_order: 0, is_active: 1, ...initialData });
   }, [initialData]);
 
   const handleChange = (e) => {
@@ -53,6 +55,23 @@ export default function QuestionForm({ initialData, onSubmit, onCancel, loading 
           required style={{ ...styles.input, height: 72, resize: 'vertical' }}
           placeholder="질문 내용을 입력하세요" />
       </div>
+      <div style={styles.row}>
+        <div style={styles.field}>
+          <label style={styles.label}>답변 유형</label>
+          <select name="answer_type" value={form.answer_type} onChange={handleChange} style={styles.select}>
+            <option value="open">open — 자유 답변</option>
+            <option value="closed">closed — 정답 지정</option>
+          </select>
+        </div>
+      </div>
+      {form.answer_type === 'closed' && (
+        <div style={styles.field}>
+          <label style={styles.label}>정답 키워드 (AI가 비교 기준으로 사용)</label>
+          <input name="expected_answer" type="text" value={form.expected_answer || ''}
+            onChange={handleChange} style={styles.input}
+            placeholder="예: 2022년 3월 15일 / 홍대 카페" />
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="submit" disabled={loading} style={styles.btnSave}>
           {loading ? '저장 중...' : '저장'}

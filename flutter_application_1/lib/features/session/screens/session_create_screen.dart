@@ -13,14 +13,12 @@ class SessionCreateScreen extends ConsumerStatefulWidget {
 }
 
 class _SessionCreateScreenState extends ConsumerState<SessionCreateScreen> {
-  final _formKey          = GlobalKey<FormState>();
-  final _titleController  = TextEditingController();
-  final _userCodeController = TextEditingController(); // MariaDB user_code (문자열)
-  final _phoneController  = TextEditingController();
+  final _formKey              = GlobalKey<FormState>();
+  final _userCodeController   = TextEditingController();
+  final _phoneController      = TextEditingController();
 
   @override
   void dispose() {
-    _titleController.dispose();
     _userCodeController.dispose();
     _phoneController.dispose();
     super.dispose();
@@ -34,8 +32,7 @@ class _SessionCreateScreenState extends ConsumerState<SessionCreateScreen> {
     final notifier = ref.read(sessionProvider.notifier);
 
     await notifier.createSession(
-      title:    _titleController.text.trim(),
-      userCode: userCode, // 서버가 DB에서 영상·질문 조회에 사용
+      userCode: userCode,
     );
     await notifier.updatePhone(_phoneController.text.trim());
 
@@ -74,19 +71,6 @@ class _SessionCreateScreenState extends ConsumerState<SessionCreateScreen> {
                   style: TextStyle(color: Colors.grey[500], fontSize: 13),
                 ),
                 const SizedBox(height: 32),
-
-                // ── 세션 이름 ───────────────────────────────────────────────
-                _label('세션 이름'),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    hintText: '예: 우리의 특별한 날',
-                  ),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? '세션 이름을 입력하세요' : null,
-                ),
-                const SizedBox(height: 24),
 
                 // ── 사용자 코드 (user_code) ──────────────────────────────────
                 _label('사용자 코드 (관리자 제공)'),

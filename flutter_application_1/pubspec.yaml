@@ -39,6 +39,9 @@ dependencies:
   # 마이크 권한 요청
   permission_handler: ^11.3.1
 
+  # 3D Hello Kitty 캐릭터 (Three.js WebGL)
+  webview_flutter: ^4.7.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

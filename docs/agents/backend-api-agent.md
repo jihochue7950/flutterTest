@@ -86,3 +86,6 @@ Solapi SMS 발송, 초대 토큰 관리, 세션 인메모리 저장소를 담당
 | 2026-05-19 | `getUserQuestions()`, `getUserVideoUrl()` 함수 확인 — DB에서 userCode 기반 조회 정상 동작 | ✅ 완료 |
 | 2026-05-19 | `POST /sessions/:id/invite` 핸들러에 SMS 호출 추가 (EC2 직접 패치) | ✅ 완료 |
 | 2026-05-19 | `package.json` `mysql2` 의존성 로컬 동기화 | ✅ 완료 |
+| 2026-05-20 | `server.js` 버그 3건 수정: videoUrl 폴백 null 처리, SMS 실패 로깅, `/health` adminServerUrl 필드 추가 | ✅ 완료 |
+| 2026-05-20 | `local_server.js` server.js 완전 동기화: mysql2 DB 연결, getUserQuestions/getUserVideoUrl, async WS 핸들러, /preview 엔드포인트 추가 | ✅ 완료 |
+| 2026-05-20 | EC2 배포 완료: `~/.ssh/flutterProject.pem` 사용, pm2 restart 후 `/health` DB 연결 확인 | ✅ 완료 |

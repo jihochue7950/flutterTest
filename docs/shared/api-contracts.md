@@ -120,10 +120,8 @@
       "is_active": 1
     },
     "questions": [
-      { "id": 1, "question_text": "오늘 어떻게 지내셨나요?", "sort_order": 0 },
-      { "id": 2, "question_text": "처음 만났던 날을 기억하시나요?", "sort_order": 1 },
-      { "id": 3, "question_text": "앞으로 함께 하고 싶은 일이 있다면?", "sort_order": 2 },
-      { "id": 4, "question_text": "지금 이 순간 가장 소중한 것은?", "sort_order": 3 }
+      { "id": 1, "question_text": "처음 만났던 날을 기억해?", "answer_type": "closed", "expected_answer": "2022년 3월", "sort_order": 0 },
+      { "id": 2, "question_text": "나를 많이 좋아해?",        "answer_type": "open",   "expected_answer": null,        "sort_order": 1 }
     ]
   }
 }

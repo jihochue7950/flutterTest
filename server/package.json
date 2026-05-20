@@ -12,8 +12,9 @@
     "pm2:logs":    "pm2 logs ai-proposal-server"
   },
   "dependencies": {
-    "ws":     "^8.16.0",
-    "uuid":   "^9.0.0",
-    "mysql2": "^3.9.4"
+    "ws":                "^8.16.0",
+    "uuid":              "^9.0.0",
+    "mysql2":            "^3.9.4",
+    "@anthropic-ai/sdk": "^0.39.0"
   }
 }

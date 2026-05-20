@@ -16,7 +16,7 @@ const getQuestions = async (req, res) => {
 };
 
 const createQuestion = async (req, res) => {
-  const { question_type, question_text, sort_order, is_active } = req.body;
+  const { question_type, question_text, answer_type, expected_answer, sort_order, is_active } = req.body;
   if (!question_text) {
     return error(res, 'question_text는 필수입니다.', 400);
   }
@@ -28,6 +28,8 @@ const createQuestion = async (req, res) => {
       user_code: user.user_code,
       question_type,
       question_text,
+      answer_type,
+      expected_answer,
       sort_order,
       is_active,
     });
@@ -39,7 +41,7 @@ const createQuestion = async (req, res) => {
 };
 
 const updateQuestion = async (req, res) => {
-  const { question_type, question_text, sort_order, is_active } = req.body;
+  const { question_type, question_text, answer_type, expected_answer, sort_order, is_active } = req.body;
   if (!question_text) {
     return error(res, 'question_text는 필수입니다.', 400);
   }
@@ -50,6 +52,8 @@ const updateQuestion = async (req, res) => {
     const question = await QuestionModel.update(req.params.questionId, {
       question_type,
       question_text,
+      answer_type,
+      expected_answer,
       sort_order,
       is_active,
     });

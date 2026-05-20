@@ -108,6 +108,73 @@
 
 ---
 
+### 2026-05-20
+
+#### [Flutter Developer Agent + Backend/API Agent + Admin Backend Agent] 2026-05-20 전체 작업 요약
+
+##### server.js / local_server.js
+- videoUrl 폴백 `null` 처리 (Flutter 로컬 에셋 폴백 정상화)
+- SMS 실패 로깅 추가 (`.catch(() => {})` → `.catch(err => log(...))`)
+- `/health` 응답에 `adminServerUrl` 필드 추가 (api-contracts.md 계약 준수)
+- OpenAI Realtime API 연동: `OPENAI_API_KEY` 환경변수, `startRealtimeSession()`, `handleRealtimeEvent()`, `rtHandleProposalComplete()`
+- `turn_detection: null` (수동 push-to-talk 모드)
+- `audioChunk` / `audioCommit` WebSocket 이벤트 추가 (User B 음성 스트리밍)
+- `sid = d.sessionId || TOKEN` fallback 버그 수정 (invite 페이지 멈춤 해결)
+- 초대 HTML 전면 재작성: push-to-talk 대형 마이크 버튼 UI, PCM16 24kHz 오디오 캡처
+
+##### Team C (ai_proposal_system)
+- `ai_questions` 테이블에 `answer_type ENUM('open','closed')`, `expected_answer TEXT` 컬럼 추가
+- `question.model.js`, `questions.controller.js`: 신규 필드 CRUD 반영
+- `QuestionForm.jsx`: answer_type 선택 + closed 선택 시 expected_answer 입력 UI
+
+##### Flutter (flutter_application_1)
+- `session_create_screen.dart`: 세션 이름 입력 필드 제거 (userCode + 전화번호만 남김)
+- `ai_avatar_screen.dart`: 2D CustomPainter 제거 → `webview_flutter` + Three.js 3D Hello Kitty 캐릭터
+  - 오른쪽에서 옆모습으로 걸어 등장 → 정면 전환 → 인사 제스처
+  - 말하기 / 듣기 / 대기 상태 JS 브릿지 연동 (`setKittyState()`)
+  - 빨간 리본, 노란 코, 수염, 꼬리 포함 헬로키티 3D 모델 (Three.js)
+- `pubspec.yaml`: `webview_flutter: ^4.7.0` 추가
+
+##### EC2 배포
+- server.js, local_server.js 배포 완료
+- OPENAI_API_KEY, ADMIN_SERVER_URL 환경변수 추가
+- EC2 DB ALTER TABLE: answer_type, expected_answer 컬럼 추가
+
+---
+
+#### [Backend/API Agent + Admin Backend Agent + Admin Frontend Agent] Phase 4 AI 대화 개선 — 3팀 협력
+- **Team C — DB 스키마**: `ai_questions` 테이블에 `answer_type ENUM('open','closed')`, `expected_answer TEXT` 컬럼 추가 (EC2 ALTER TABLE 완료)
+- **Team C — question.model.js**: `findActiveByUserCode` 쿼리에 신규 컬럼 포함, `create`/`update` 함수에 `answer_type`·`expected_answer` 반영
+- **Team C — questions.controller.js**: 신규 필드 CRUD 처리 추가
+- **Team C — QuestionForm.jsx**: `answer_type` 선택 드롭다운(open/closed), `closed` 선택 시 `expected_answer` 입력 필드 조건부 표시
+- **Team B — server.js**: Claude AI(`@anthropic-ai/sdk`) 연동 추가
+  - `DEFAULT_QUESTIONS`: 문자열 배열 → `{question_text, answer_type, expected_answer}` 객체 배열
+  - `getUserQuestions()`: `answer_type`, `expected_answer` 컬럼 포함 조회, 객체 배열 반환
+  - `generateAiReaction()`: Claude Haiku로 자연스러운 반응 생성, JSON `{response, moveToNext}` 파싱
+  - `handleUserBJoined()`: `conversationHistory`, `retryCount` 세션 필드 초기화
+  - `handleUserBSpeech()`: 완전 재작성 — LLM 반응 → open 무조건 진행 / closed 정답 판별 → 1회 재시도 허용 후 강제 진행
+- **Team B — local_server.js**: server.js와 동일 로직 동기화 완료
+- **Team B — package.json**: `@anthropic-ai/sdk ^0.39.0` 의존성 추가
+- **EC2 배포 완료**: ai-proposal-server, ai-proposal-admin 모두 pm2 restart 완료
+- **ANTHROPIC_API_KEY 미설정 상태**: 현재 기본 반응 모드로 동작. 실제 AI 반응을 원하면 EC2 `ecosystem.config.js`에 `ANTHROPIC_API_KEY` 추가 필요
+
+#### [Backend/API Agent] server.js 버그 수정 3건 및 local_server.js 완전 동기화
+- **수정 1 — videoUrl 폴백 오류**: `handleUserBSpeech`에서 DB 영상 없을 때 `'assets/video/proposal.mp4'`(Flutter 로컬 에셋 경로)를 WebSocket으로 전송하던 문제 수정
+  - 변경: `|| 'assets/video/proposal.mp4'` → `|| null`
+  - 효과: Flutter `avatar_provider.dart`의 `?? _kDefaultVideoUrl` 폴백이 정상 동작, VideoPlayer가 에셋 경로를 네트워크 URL로 오인하지 않음
+- **수정 2 — SMS 오류 묵살**: `sendSolapiSms().catch(() => {})` → `.catch(err => log('❌', ...))` 로 변경, SMS 실패 원인을 PM2 로그에서 확인 가능하게 됨
+- **수정 3 — /health 응답 계약 불일치**: `api-contracts.md`에 명시된 `adminServerUrl` 필드 누락 → `process.env.ADMIN_SERVER_URL || null` 추가
+- **local_server.js 완전 동기화**: 기존 하드코딩 방식(QUESTIONS 배열, videoUrl='assets/video/proposal.mp4')을 server.js와 동일한 구조로 재작성
+  - mysql2 DB 연결 + getUserQuestions() / getUserVideoUrl() 함수 추가
+  - handleUserBJoined / handleUserBSpeech async 전환 (DB 기반 질문·영상 로드)
+  - POST /sessions에 userCode 필드 추가
+  - GET /users/:userCode/preview 엔드포인트 추가
+  - GET /health에 DB 상태 및 adminServerUrl 추가
+  - Solapi SMS 선택적 연동 (환경변수 없으면 건너뜀)
+- **배포 완료**: EC2 `ai-proposal-server` PM2 재시작 완료, `/health` → `{"status":"ok","db":"connected","adminServerUrl":null}` 확인
+
+---
+
 ## Phase 현황
 
 | Phase | 상태 | 완료일 |
@@ -116,7 +183,7 @@
 | Phase 1: API 계약서 확정 | ✅ 완료 | 2026-05-19 |
 | Phase 2: Team C Admin 배포 | ✅ 완료 | 2026-05-19 (EC2 배포 완료, DB 연결) |
 | Phase 3: Team B ↔ Team C 연동 | ✅ 완료 | 2026-05-19 (userCode → DB 조회) |
-| Phase 4: Flutter 앱 AI 대화 E2E | 🔄 진행 중 | - |
+| Phase 4: Flutter 앱 AI 대화 E2E | 🔄 진행 중 | AI 대화 흐름 개선 완료, ANTHROPIC_API_KEY 설정 후 실기기 E2E 테스트 필요 |
 | Phase 5: Chromecast 실제 연동 | ⏳ 대기 | 하드웨어 준비 필요 |
 | Phase 6: QA/QC 전체 테스트 | ⏳ 대기 | - |
 | Phase 7: iOS 빌드 및 배포 준비 | 🔄 진행 중 | Release 빌드 완료, 보안 점검 진행 중 |

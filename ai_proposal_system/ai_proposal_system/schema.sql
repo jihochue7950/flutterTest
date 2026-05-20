@@ -43,12 +43,18 @@ CREATE TABLE IF NOT EXISTS ai_questions (
   user_code VARCHAR(100) NOT NULL,
   question_type ENUM('intro','needs','budget','concern','closing','custom') DEFAULT 'custom',
   question_text TEXT NOT NULL,
+  answer_type ENUM('open','closed') DEFAULT 'open',
+  expected_answer TEXT NULL,
   sort_order INT DEFAULT 0,
   is_active TINYINT(1) DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_code) REFERENCES users(user_code) ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+-- Migration: 기존 DB에 컬럼 추가 (신규 설치 시 불필요, ALTER 무시됨)
+-- ALTER TABLE ai_questions ADD COLUMN answer_type ENUM('open','closed') DEFAULT 'open' AFTER question_text;
+-- ALTER TABLE ai_questions ADD COLUMN expected_answer TEXT NULL AFTER answer_type;
 
 -- Default admin account (password: admin1234 → bcrypt hash 직접 생성 필요)
 -- node -e "const bcrypt=require('bcrypt'); bcrypt.hash('admin1234',10).then(h=>console.log(h))"
