@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{overflow:hidden;background:transparent}
+  canvas{display:block;width:100vw;height:100vh}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 1.2, 5.5);
+camera.lookAt(0, 0.8, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xfff8f0, 1.0));
+const key = new THREE.DirectionalLight(0xffffff, 1.8);
+key.position.set(3, 5, 4); key.castShadow = true; scene.add(key);
+const fill = new THREE.DirectionalLight(0xffd0e8, 0.6);
+fill.position.set(-3, 2, 3);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0xaaaaff, 0.35);
+rim.position.set(0, -1, -5);
+scene.add(rim);
+
+const bunnyGroup = new THREE.Group();
+scene.add(bunnyGroup);
+
+let mixer = null;
+
+const loader = new GLTFLoader();
+loader.load(
+  '../models/cute_bunny.glb',
+  (gltf) => {
+    const model = gltf.scene;
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const scale = 2.2 / Math.max(size.x, size.y, size.z);
+
+    model.scale.setScalar(scale);
+    model.position.sub(center.multiplyScalar(scale));
+    model.position.y += size.y * scale * 0.5;
+
+    model.traverse(child => {
+      if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
+    });
+
+    bunnyGroup.add(model);
+
+    if (gltf.animations?.length > 0) {
+      mixer = new THREE.AnimationMixer(model);
+      gltf.animations.forEach(clip => mixer.clipAction(clip).play());
+    }
+  },
+  undefined,
+  (err) => console.error('GLB load error:', err)
+);
+
+// ── 상태 머신 (Flutter에서 setKittyState() 호출) ───────────────────────────
+let state = 'idle', st = 0, prevT = performance.now() / 1000;
+const eio = p => p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
+
+window.setKittyState = function(s) { state = s; st = 0; };
+window.setBunnyState  = window.setKittyState;
+
+function tick() {
+  requestAnimationFrame(tick);
+  const now = performance.now() / 1000;
+  const dt = Math.min(now - prevT, 0.05); prevT = now; st += dt;
+
+  if (mixer) mixer.update(dt);
+
+  bunnyGroup.rotation.set(0, 0, 0);
+  bunnyGroup.position.set(0, 0, 0);
+
+  if (state === 'entering') {
+    const p = Math.min(st / 2.1, 1), e = eio(p);
+    bunnyGroup.position.x = (1 - e) * 6;
+    bunnyGroup.rotation.y = Math.PI * 0.5 * (1 - e);
+    bunnyGroup.position.y = Math.abs(Math.sin(st * 8)) * 0.12 - 0.06;
+    if (p >= 1) { state = 'idle'; st = 0; }
+
+  } else if (state === 'greeting') {
+    bunnyGroup.position.y = Math.sin(st * 3) * 0.06;
+    bunnyGroup.rotation.y = Math.sin(st * Math.PI / 2.6) * 0.15;
+    if (st >= 2.6) { state = 'idle'; st = 0; }
+
+  } else if (state === 'idle') {
+    bunnyGroup.position.y = Math.sin(st * 1.6) * 0.07;
+    bunnyGroup.rotation.y = Math.sin(st * 0.45) * 0.07;
+
+  } else if (state === 'speaking') {
+    bunnyGroup.position.y = Math.sin(st * 2.2) * 0.06;
+    bunnyGroup.rotation.y = Math.sin(st * 0.5) * 0.05;
+    bunnyGroup.rotation.x = Math.sin(st * 8) * 0.025;
+
+  } else if (state === 'listening') {
+    bunnyGroup.position.y = Math.sin(st * 1.4) * 0.06;
+    bunnyGroup.rotation.y = Math.sin(st * 0.38) * 0.08;
+    bunnyGroup.rotation.x = -0.06 + Math.sin(st * 1.2) * 0.03;
+  }
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+tick();
+</script>
+</body>
+</html>
