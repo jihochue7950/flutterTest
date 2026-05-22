@@ -11,6 +11,12 @@ const questionsRoutes = require('./routes/questions.routes');
 const questionDirectRoutes = require('./routes/questions.direct.routes');
 const proposalRoutes = require('./routes/proposal.routes');
 
+// 신규: 상품 / 주문 라우트
+const productsPublicRoutes = require('./routes/products.routes');
+const productsAdminRoutes = require('./routes/products.admin.routes');
+const ordersPublicRoutes = require('./routes/orders.routes');
+const ordersAdminRoutes = require('./routes/orders.admin.routes');
+
 const { uploadPath } = require('./config/upload');
 
 const app = express();
@@ -19,32 +25,45 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Static video files
+// 정적 파일: 업로드된 영상
 app.use('/videos', express.static(uploadPath));
 
-// Admin client build (after running npm run build in admin-client)
-app.use(express.static(path.join(__dirname, '../../admin-client/build')));
+// ─────────────────────────────────────────
+// 공개 API (인증 불필요)
+// ─────────────────────────────────────────
+app.use('/api/products', productsPublicRoutes);
+app.use('/api/orders', ordersPublicRoutes);
 
-// API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/users/:id/videos', videosRoutes);
-app.use('/api/videos', videoDirectRoutes);
-app.use('/api/users/:id/questions', questionsRoutes);
-app.use('/api/questions', questionDirectRoutes);
+// Team B 전용 proposal-data (기존 유지)
 app.use('/api/users', proposalRoutes);
 
-// Fallback to React app
+// ─────────────────────────────────────────
+// 관리자 API (JWT 필요)
+// ─────────────────────────────────────────
+app.use('/api/auth', authRoutes);
+app.use('/api/admin/users', usersRoutes);
+app.use('/api/admin/users/:id/videos', videosRoutes);
+app.use('/api/admin/videos', videoDirectRoutes);
+app.use('/api/admin/users/:id/questions', questionsRoutes);
+app.use('/api/admin/questions', questionDirectRoutes);
+app.use('/api/admin/products', productsAdminRoutes);
+app.use('/api/admin/orders', ordersAdminRoutes);
+
+// ─────────────────────────────────────────
+// React SPA (admin-client build)
+// ─────────────────────────────────────────
+app.use(express.static(path.join(__dirname, '../../admin-client/build')));
+
 app.get('*', (req, res) => {
   const buildPath = path.join(__dirname, '../../admin-client/build/index.html');
   if (require('fs').existsSync(buildPath)) {
     res.sendFile(buildPath);
   } else {
-    res.json({ message: 'AI Proposal Admin Server is running.' });
+    res.json({ message: 'AI Proposal Server is running.' });
   }
 });
 
-// Global error handler
+// 전역 에러 핸들러
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ success: false, message: err.message || '서버 오류' });
