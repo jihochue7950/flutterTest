@@ -9,6 +9,14 @@ import OrderPage from './pages/public/OrderPage';
 import OrderCompletePage from './pages/public/OrderCompletePage';
 import DownloadPage from './pages/public/DownloadPage';
 
+// Team D — 영상 제작 (공개 + 관리자)
+import VideoCreatorWizard  from './pages/video-creator/VideoCreatorWizard';
+import PhotoUploadPage     from './pages/video-creator/PhotoUploadPage';
+import MusicSelectPage     from './pages/video-creator/MusicSelectPage';
+import ScenarioPage        from './pages/video-creator/ScenarioPage';
+import PreviewPage         from './pages/video-creator/PreviewPage';
+import AdminVideoProjects  from './pages/video-creator/AdminVideoProjects';
+
 // 관리자 페이지
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -49,6 +57,16 @@ export default function App() {
         <Route path="/admin/products/:id/edit" element={<AdminRoute><AdminProductForm /></AdminRoute>} />
         <Route path="/admin/orders" element={<AdminRoute><AdminOrders /></AdminRoute>} />
         <Route path="/admin/orders/:id" element={<AdminRoute><AdminOrderDetail /></AdminRoute>} />
+
+        {/* ── Team D: 영상 제작 마법사 (공개) ── */}
+        <Route path="/video-creator"                      element={<VideoCreatorWizard />} />
+        <Route path="/video-creator/:id/photos"           element={<PhotoUploadPage />} />
+        <Route path="/video-creator/:id/music"            element={<MusicSelectPage />} />
+        <Route path="/video-creator/:id/scenario"         element={<ScenarioPage />} />
+        <Route path="/video-creator/:id/preview"          element={<PreviewPage />} />
+
+        {/* ── Team D: 관리자 영상 관리 ── */}
+        <Route path="/admin/video-projects" element={<AdminRoute><AdminVideoProjects /></AdminRoute>} />
 
         {/* 구 경로 → /admin 리다이렉트 (북마크 호환) */}
         <Route path="/login" element={<Navigate to="/admin/login" replace />} />
