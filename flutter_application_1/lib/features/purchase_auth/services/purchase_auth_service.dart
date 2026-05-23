@@ -57,6 +57,48 @@ class PurchaseAuthService {
       body['message'] as String? ?? '인증에 실패했습니다.',
     );
   }
+
+  /// 결제 없이 즉시 활성화된 테스트 주문을 생성합니다.
+  /// [userCode] 를 전달하면 해당 userCode의 영상/질문을 사용합니다.
+  Future<TestOrderResult> createTestOrder({String? userCode}) async {
+    final response = await http
+        .post(
+          Uri.parse('$_baseUrl/api/orders/test'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({if (userCode != null) 'user_code': userCode}),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200 && body['success'] == true) {
+      final data = body['data'] as Map<String, dynamic>;
+      return TestOrderResult(
+        orderNumber: data['order_number'] as String,
+        accessCode:  data['access_code']  as String,
+        productName: data['product_name'] as String? ?? 'AI 이벤트',
+        productSlug: data['product_slug'] as String? ?? '',
+      );
+    }
+
+    throw PurchaseAuthException(
+      body['message'] as String? ?? '테스트 주문 생성에 실패했습니다.',
+    );
+  }
+}
+
+class TestOrderResult {
+  final String orderNumber;
+  final String accessCode;
+  final String productName;
+  final String productSlug;
+
+  const TestOrderResult({
+    required this.orderNumber,
+    required this.accessCode,
+    required this.productName,
+    required this.productSlug,
+  });
 }
 
 class PurchaseAuthException implements Exception {

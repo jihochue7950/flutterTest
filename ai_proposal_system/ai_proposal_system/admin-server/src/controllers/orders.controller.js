@@ -117,4 +117,28 @@ const updateStatus = async (req, res) => {
   }
 };
 
-module.exports = { createOrder, getOrderByNumber, verifyAccess, getAllAdmin, getOneAdmin, updateStatus };
+// 공개: 결제 없이 즉시 활성화된 테스트 주문 생성
+const createTestOrder = async (req, res) => {
+  try {
+    const db = require('../config/db');
+    const userCode = req.body.user_code || req.query.user_code || null;
+
+    // 첫 번째 활성 상품 사용 (없으면 product_id=1 기본값)
+    const [products] = await db.query('SELECT id, name, slug FROM products WHERE is_active=1 LIMIT 1');
+    const product = products[0] || { id: 1, name: 'AI 이벤트', slug: 'emotional-proposal' };
+
+    const order = await OrderModel.createTest({ productId: product.id, userCode });
+    return success(res, {
+      order_number:  order.order_number,
+      access_code:   order.access_code,
+      product_name:  product.name,
+      product_slug:  product.slug,
+      user_code:     userCode,
+    }, '테스트 주문이 생성되었습니다.');
+  } catch (err) {
+    console.error('createTestOrder error:', err);
+    return error(res, '테스트 주문 생성 실패', 500);
+  }
+};
+
+module.exports = { createOrder, getOrderByNumber, verifyAccess, getAllAdmin, getOneAdmin, updateStatus, createTestOrder };

@@ -16,6 +16,7 @@ class _PurchaseAuthScreenState extends State<PurchaseAuthScreen> {
   final _service = PurchaseAuthService();
 
   bool _loading = false;
+  bool _testLoading = false;
   String? _error;
 
   static const _pink = Color(0xFFE91E63);
@@ -39,6 +40,67 @@ class _PurchaseAuthScreenState extends State<PurchaseAuthScreen> {
       if (mounted) setState(() { _loading = false; });
     }
   }
+
+  /// 결제 없이 테스트 주문을 생성하고 바로 인증 성공 화면으로 이동합니다.
+  Future<void> _testMode() async {
+    setState(() { _testLoading = true; _error = null; });
+    try {
+      final test = await _service.createTestOrder();
+      if (!mounted) return;
+
+      // 생성된 테스트 인증코드를 잠깐 보여준 뒤 자동 진행
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text('🧪 테스트 주문 생성됨'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('아래 정보로 테스트가 시작됩니다.', style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 16),
+              _credRow('주문번호', test.orderNumber),
+              const SizedBox(height: 6),
+              _credRow('인증코드', test.accessCode),
+              const SizedBox(height: 6),
+              _credRow('상품', test.productName),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('테스트 시작'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true && mounted) {
+        final result = PurchaseAuthResult(
+          orderNumber: test.orderNumber,
+          productName: test.productName,
+          productSlug: test.productSlug,
+          targetName:  '테스트',
+          userCode:    null,
+        );
+        context.push('/purchase/success', extra: result);
+      }
+    } on PurchaseAuthException catch (e) {
+      setState(() { _error = e.message; });
+    } catch (_) {
+      setState(() { _error = '테스트 주문 생성 실패. 서버 연결을 확인하세요.'; });
+    } finally {
+      if (mounted) setState(() { _testLoading = false; });
+    }
+  }
+
+  Widget _credRow(String label, String value) => Row(
+    children: [
+      Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+      Flexible(child: SelectableText(value, style: TextStyle(fontSize: 14, color: Colors.blue[700], fontWeight: FontWeight.w700))),
+    ],
+  );
 
   @override
   void dispose() {
@@ -151,7 +213,27 @@ class _PurchaseAuthScreenState extends State<PurchaseAuthScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 16),
+
+                // 테스트 모드 버튼 (결제 없이 즉시 테스트)
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: (_loading || _testLoading) ? null : _testMode,
+                    icon: _testLoading
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.science_outlined, size: 18),
+                    label: Text(_testLoading ? '테스트 주문 생성 중...' : '결제 없이 테스트하기'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey[600],
+                      side: BorderSide(color: Colors.grey[300]!),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
 
                 // 도움말
                 _helpBox(),

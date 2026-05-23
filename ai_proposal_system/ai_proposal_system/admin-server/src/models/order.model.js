@@ -79,6 +79,22 @@ const OrderModel = {
     return this.findById(result.insertId);
   },
 
+  // 결제 없이 즉시 활성화된 테스트 주문 생성
+  async createTest({ productId, userCode = null }) {
+    const orderNumber = `TEST-${generateOrderNumber().replace('ORDER-', '')}`;
+    const accessCode  = generateAccessCode();
+    const [result] = await db.query(
+      `INSERT INTO orders
+         (order_number, product_id, buyer_name, phone, email, target_name,
+          access_code, app_access_enabled, user_code, order_status, admin_memo)
+       VALUES (?, ?, '테스트', '01000000000', 'test@test.com', '테스트',
+               ?, 1, ?, '세션준비', '테스트 주문 — 결제 없이 생성됨')`,
+      [orderNumber, productId, accessCode, userCode]
+    );
+    const order = await this.findById(result.insertId);
+    return { ...order, order_number: orderNumber, access_code: accessCode };
+  },
+
   async updateStatus(id, { order_status, payment_status, app_access_enabled, user_code, admin_memo }) {
     const setClauses = [];
     const values = [];
