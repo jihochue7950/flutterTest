@@ -34,8 +34,10 @@ dependencies:
 
   # AI 아바타 TTS (TV 화면에서 AI 음성 출력)
   flutter_tts: ^4.0.2
-  # User B 음성 인식 (마이크 → 텍스트)
+  # User B 음성 인식 (마이크 → 텍스트, STT 폴백용)
   speech_to_text: ^6.6.2
+  # PCM16 오디오 캡처 → OpenAI Realtime API 스트리밍
+  record: ^6.0.0
   # 마이크 권한 요청
   permission_handler: ^11.3.1
 
