@@ -12,15 +12,59 @@ enum SessionStatus {
   completed,
 }
 
+/// productSlug로부터 파생되는 이벤트 타입
+enum EventCategory {
+  proposal,    // 프로포즈 계열 (감동형/영상편지/대화형/TV프리미엄)
+  birthday,    // 생일 서프라이즈
+  anniversary, // 기념일/가족 이벤트
+}
+
+extension EventCategoryX on EventCategory {
+  String get serverValue => name; // 'proposal' | 'birthday' | 'anniversary'
+
+  static EventCategory fromSlug(String? slug) {
+    if (slug == null) return EventCategory.proposal;
+    if (slug.contains('birthday')) return EventCategory.birthday;
+    if (slug.contains('anniversary') || slug.contains('family')) return EventCategory.anniversary;
+    return EventCategory.proposal;
+  }
+
+  static EventCategory fromString(String? value) {
+    return EventCategory.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => EventCategory.proposal,
+    );
+  }
+
+  /// 홈/버튼 등에 표시할 액션 라벨
+  String get actionLabel => switch (this) {
+    EventCategory.proposal    => '💍 프로포즈 시작하기',
+    EventCategory.birthday    => '🎂 생일 이벤트 시작하기',
+    EventCategory.anniversary => '🎉 기념일 이벤트 시작하기',
+  };
+
+  /// SMS 초대 수신자 라벨
+  String get recipientLabel => switch (this) {
+    EventCategory.proposal    => '상대방 전화번호',
+    EventCategory.birthday    => '생일 주인공 전화번호',
+    EventCategory.anniversary => '기념일 주인공 전화번호',
+  };
+
+  /// 흐름 안내 문구
+  String get flowTitle => switch (this) {
+    EventCategory.proposal    => '특별한 순간을 준비하세요 💍',
+    EventCategory.birthday    => '잊지 못할 생일을 만들어 드려요 🎂',
+    EventCategory.anniversary => '소중한 기념일을 함께 축하해요 🎉',
+  };
+}
+
 class SessionModel extends Equatable {
   final String id;
   final SessionStatus status;
   final String? title;
-
-  /// MariaDB user_videos.user_code / ai_questions.user_code
-  /// 서버가 이 값으로 영상 URL과 커스텀 질문을 조회합니다.
   final String? userCode;
-
+  final EventCategory eventType;
+  final String? productSlug;
   final String? videoId;
   final String? userBPhone;
   final String? inviteToken;
@@ -33,6 +77,8 @@ class SessionModel extends Equatable {
     required this.status,
     this.title,
     this.userCode,
+    this.eventType = EventCategory.proposal,
+    this.productSlug,
     this.videoId,
     this.userBPhone,
     this.inviteToken,
@@ -46,6 +92,8 @@ class SessionModel extends Equatable {
     SessionStatus? status,
     String? title,
     String? userCode,
+    EventCategory? eventType,
+    String? productSlug,
     String? videoId,
     String? userBPhone,
     String? inviteToken,
@@ -58,6 +106,8 @@ class SessionModel extends Equatable {
       status: status ?? this.status,
       title: title ?? this.title,
       userCode: userCode ?? this.userCode,
+      eventType: eventType ?? this.eventType,
+      productSlug: productSlug ?? this.productSlug,
       videoId: videoId ?? this.videoId,
       userBPhone: userBPhone ?? this.userBPhone,
       inviteToken: inviteToken ?? this.inviteToken,
@@ -76,6 +126,8 @@ class SessionModel extends Equatable {
       ),
       title: json['title'] as String?,
       userCode: json['userCode'] as String?,
+      eventType: EventCategoryX.fromString(json['eventType'] as String?),
+      productSlug: json['productSlug'] as String?,
       videoId: json['videoId'] as String?,
       userBPhone: json['userBPhone'] as String?,
       inviteToken: json['inviteToken'] as String?,
@@ -90,6 +142,8 @@ class SessionModel extends Equatable {
         'status': status.name,
         'title': title,
         'userCode': userCode,
+        'eventType': eventType.serverValue,
+        'productSlug': productSlug,
         'videoId': videoId,
         'userBPhone': userBPhone,
         'inviteToken': inviteToken,
@@ -100,7 +154,7 @@ class SessionModel extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, status, title, userCode, videoId, userBPhone,
-        inviteToken, tvConnected, userBJoined, createdAt,
+        id, status, title, userCode, eventType, productSlug,
+        videoId, userBPhone, inviteToken, tvConnected, userBJoined, createdAt,
       ];
 }

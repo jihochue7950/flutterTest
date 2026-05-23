@@ -72,9 +72,39 @@ const sessions  = new Map(); // sessionId → session 객체
 const tokenMap  = new Map(); // inviteToken → sessionId
 const clientMap = new Map(); // sessionId → Set<WebSocket>
 
+// ── eventType 설정 ─────────────────────────────────────────────────────────────
+
+// productSlug → eventType 매핑
+function slugToEventType(slug) {
+  if (!slug) return 'proposal';
+  if (slug.includes('birthday'))    return 'birthday';
+  if (slug.includes('anniversary') || slug.includes('family')) return 'anniversary';
+  return 'proposal';
+}
+
+// eventType별 AI 페르소나 및 톤
+const EVENT_PERSONAS = {
+  proposal: {
+    persona:  '당신은 감동적인 프로포즈를 연출하는 따뜻한 AI 큐피드입니다.',
+    tone:     '따뜻하고 감동적인 분위기로 대화하세요. 상대방의 마음을 열어주는 질문을 이어가세요.',
+    closing:  '정말 감사합니다. 소중한 이야기를 나눠주셔서 행복했습니다. 이제 특별히 준비한 영상을 보여드리겠습니다.',
+  },
+  birthday: {
+    persona:  '당신은 특별한 생일을 축하해주는 활기차고 따뜻한 AI 어시스턴트입니다.',
+    tone:     '밝고 유쾌하지만 따뜻한 분위기로 대화하세요. 생일 주인공이 기분 좋게 웃을 수 있도록 해주세요.',
+    closing:  '오늘 이렇게 함께해서 너무 행복했어요! 생일을 더욱 특별하게 만들어줄 깜짝 선물을 보여드릴게요.',
+  },
+  anniversary: {
+    persona:  '당신은 소중한 기념일을 함께 축하하는 따뜻한 AI 어시스턴트입니다.',
+    tone:     '따뜻하고 감사한 분위기로 대화하세요. 함께한 시간의 소중함을 느낄 수 있도록 해주세요.',
+    closing:  '함께한 시간들이 얼마나 소중한지 다시 한번 느낄 수 있었습니다. 특별한 영상을 보여드리겠습니다.',
+  },
+};
+
 // ── OpenAI Realtime API ───────────────────────────────────────────────────────
 
-function buildRealtimeSystemPrompt(questions) {
+function buildRealtimeSystemPrompt(questions, eventType = 'proposal') {
+  const persona = EVENT_PERSONAS[eventType] || EVENT_PERSONAS.proposal;
   const qList = questions.map((q, i) => {
     const aType    = q.answer_type     || 'open';
     const expected = aType === 'closed' && q.expected_answer
@@ -82,7 +112,8 @@ function buildRealtimeSystemPrompt(questions) {
     return `${i + 1}. [${aType}] ${q.question_text}${expected}`;
   }).join('\n');
 
-  return `당신은 특별한 프로포즈 경험을 연출하는 따뜻한 AI 어시스턴트입니다. 반드시 한국어로만 대화합니다.
+  return `${persona.persona} 반드시 한국어로만 대화합니다.
+${persona.tone}
 
 아래 질문들을 순서대로 진행하세요:
 ${qList}
@@ -103,7 +134,7 @@ async function startRealtimeSession(sessionId, session) {
   if (!OPENAI_API_KEY) return false;
 
   const questions    = session.questions || DEFAULT_QUESTIONS;
-  const systemPrompt = buildRealtimeSystemPrompt(questions);
+  const systemPrompt = buildRealtimeSystemPrompt(questions, session.eventType || 'proposal');
 
   try {
     const rtWs = new WebSocket(
@@ -647,10 +678,9 @@ async function handleUserBSpeech(sessionId, session, text) {
         }, ttsDelay(aiReaction));
 
       } else {
-        // 모든 질문 완료 → 마무리 멘트 + 영상
-        const closing =
-          '정말 감사합니다. 소중한 이야기를 나눠주셔서 행복했습니다. ' +
-          '이제 특별히 준비한 영상을 보여드리겠습니다.';
+        // 모든 질문 완료 → eventType별 마무리 멘트 + 영상
+        const eventPersona = EVENT_PERSONAS[session.eventType] || EVENT_PERSONAS.proposal;
+        const closing = eventPersona.closing;
 
         setTimeout(async () => {
           log('🎤', '마무리 멘트 전송');
@@ -706,26 +736,29 @@ const apiServer = http.createServer((req, res) => {
         const data = await readBody();
 
         // userCode: Flutter 앱에서 세션 생성 시 전달
-        //           user_videos.user_code, ai_questions.user_code 와 일치해야 함
-        const userCode = data.userCode || data.user_code || null;
+        const userCode   = data.userCode || data.user_code || null;
+        // productSlug → eventType 변환 (없으면 proposal 기본값)
+        const eventType  = data.eventType || slugToEventType(data.productSlug);
 
         const session = {
           id:              uuidv4(),
           status:          'created',
-          title:           data.title  || 'AI 프로포즈',
-          userCode,                          // ← user_code 식별자
+          title:           data.title  || 'AI 이벤트',
+          userCode,
+          eventType,                         // ← proposal / birthday / anniversary
+          productSlug:     data.productSlug || null,
           videoId:         data.videoId || null,
           userBPhone:      null,
           inviteToken:     null,
           tvConnected:     false,
           userBJoined:     false,
           currentQuestion: -1,
-          questions:       null,             // userBJoined 시 DB에서 로드
+          questions:       null,
           answers:         [],
           createdAt:       new Date().toISOString(),
         };
         sessions.set(session.id, session);
-        log('📋', `세션 생성 [${session.id.substring(0, 8)}...] userCode: ${userCode}`);
+        log('📋', `세션 생성 [${session.id.substring(0, 8)}...] userCode: ${userCode} eventType: ${eventType}`);
         res.writeHead(200); res.end(JSON.stringify(session));
         return;
       }

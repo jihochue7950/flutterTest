@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/purchase_auth_service.dart';
+import '../../../core/models/session_model.dart';
 
 class PurchaseSuccessScreen extends StatelessWidget {
   final PurchaseAuthResult result;
@@ -10,6 +11,9 @@ class PurchaseSuccessScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final eventType = EventCategoryX.fromSlug(result.productSlug);
+    final targetPrefix = result.targetName.isNotEmpty ? '${result.targetName}님을 위한 ' : '';
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -36,7 +40,7 @@ class PurchaseSuccessScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               Text(
-                '${result.targetName.isNotEmpty ? result.targetName + '님을 위한 ' : ''}${result.productName}이\n준비되었습니다.',
+                '$targetPrefix${result.productName}이\n준비되었습니다.',
                 style: const TextStyle(fontSize: 17, color: Color(0xFF555555), height: 1.6),
                 textAlign: TextAlign.center,
               ),
@@ -57,7 +61,7 @@ class PurchaseSuccessScreen extends StatelessWidget {
                     _infoRow('상품', result.productName),
                     if (result.targetName.isNotEmpty) ...[
                       const Divider(height: 20),
-                      _infoRow('프로포즈 대상', result.targetName),
+                      _infoRow('대상', result.targetName),
                     ],
                   ],
                 ),
@@ -65,26 +69,23 @@ class PurchaseSuccessScreen extends StatelessWidget {
 
               const Spacer(),
 
-              // 프로포즈 시작 버튼
+              // 이벤트 타입별 시작 버튼
               SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    // user_code가 있으면 바로 세션 생성 화면으로
-                    if (result.userCode != null && result.userCode!.isNotEmpty) {
-                      context.go('/session/create', extra: {'userCode': result.userCode});
-                    } else {
-                      context.go('/session/create');
-                    }
-                  },
+                  onPressed: () => context.go('/session/create', extra: {
+                    'userCode':    result.userCode,
+                    'productSlug': result.productSlug,
+                    'targetName':  result.targetName,
+                  }),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _pink,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                   ),
-                  child: const Text('💍 프로포즈 시작하기'),
+                  child: Text(eventType.actionLabel),
                 ),
               ),
               const SizedBox(height: 12),

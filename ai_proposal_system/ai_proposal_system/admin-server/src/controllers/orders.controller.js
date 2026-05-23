@@ -1,6 +1,7 @@
 const OrderModel = require('../models/order.model');
 const ProductModel = require('../models/product.model');
 const { success, error } = require('../utils/response');
+const { sendSms } = require('../utils/sms.util');
 
 // 공개: 주문 생성
 const createOrder = async (req, res) => {
@@ -87,8 +88,28 @@ const getOneAdmin = async (req, res) => {
 // 관리자: 주문 상태 변경 (결제상태, 진행상태, 앱접근 허용)
 const updateStatus = async (req, res) => {
   try {
+    // 활성화 전 상태 조회 (SMS 중복 발송 방지용)
+    const before = await OrderModel.findById(req.params.id);
+    if (!before) return error(res, '주문을 찾을 수 없습니다.', 404);
+
     const order = await OrderModel.updateStatus(req.params.id, req.body);
     if (!order) return error(res, '주문을 찾을 수 없습니다.', 404);
+
+    // app_access_enabled 가 0 → 1 로 바뀌는 순간 구매자에게 SMS 발송
+    if (!before.app_access_enabled && order.app_access_enabled && order.phone) {
+      const downloadUrl = `${process.env.SERVER_BASE_URL || 'http://localhost:8080'}/download`;
+      const text =
+        `[AI 이벤트] 서비스 준비 완료!\n\n` +
+        `주문번호: ${order.order_number}\n` +
+        `인증코드: ${order.access_code}\n\n` +
+        `앱을 실행하고 주문번호와 인증코드를 입력하세요.\n` +
+        `앱 다운로드: ${downloadUrl}`;
+
+      sendSms({ to: order.phone, text }).catch((e) =>
+        console.error('[SMS] 앱 활성화 알림 발송 실패:', e)
+      );
+    }
+
     return success(res, order, '주문 상태가 변경되었습니다.');
   } catch (err) {
     console.error('updateStatus error:', err);
