@@ -104,33 +104,62 @@ function _parseVideoUrl(result, model) {
       || null;
 }
 
-// ── Mock: 기존 영상 파일 복사 (메모리 절약) ──────────────────────────────────
-// EC2에 기존 영상이 있으면 복사, 없으면 최소 MP4 파일 생성
+// ── Mock: 플랫폼별 자동 전환 영상 생성 ──────────────────────────────────────
+// ① lavfi 지원(Mac) → ② EC2 기존 파일 복사 → ③ 최소 MP4 바이너리
 const MOCK_SOURCE_PATHS = [
   '/var/www/ai-proposal/videos/1778829475816_e8660170.mp4',
   '/var/www/ai-proposal/videos/1778827295918_1476c53b.mp4',
 ];
 
-async function _generateMockVideo({ sceneOrder, prompt, durationSeconds, outputPath }) {
-  // 기존 영상 파일 복사 (ffmpeg 없이)
+let _lavfiCache = null;
+async function _testLavfi() {
+  if (_lavfiCache !== null) return _lavfiCache;
+  return new Promise(resolve => {
+    const os = require('os');
+    const tmp = path.join(os.tmpdir(), `lavfi_test_${Date.now()}.mp4`);
+    ffmpeg()
+      .input('color=c=black:size=32x32:duration=0.1').inputOptions(['-f lavfi'])
+      .outputOptions(['-c:v libx264', '-pix_fmt yuv420p'])
+      .output(tmp)
+      .on('end', () => { fs.unlink(tmp, () => {}); _lavfiCache = true;  resolve(true);  })
+      .on('error', () => {                           _lavfiCache = false; resolve(false); })
+      .run();
+  });
+}
+
+async function _generateMockVideo({ sceneOrder, durationSeconds, outputPath }) {
+  // Mac (lavfi 지원): 텍스트 오버레이 실제 영상 생성
+  if (await _testLavfi()) {
+    return new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(`color=c=0x1a1a2e:size=1280x720:rate=24:duration=${durationSeconds}`)
+        .inputOptions(['-f lavfi'])
+        .videoFilter([
+          `drawtext=text='Scene ${sceneOrder}':fontsize=60:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2`,
+          `drawtext=text='MOCK MODE':fontsize=24:fontcolor=yellow:x=10:y=10`,
+        ])
+        .outputOptions(['-c:v libx264', '-pix_fmt yuv420p', '-an'])
+        .output(outputPath)
+        .on('end', () => { console.log(`[fal] Mock lavfi 완료: Scene ${sceneOrder}`); resolve(); })
+        .on('error', (e) => reject(new Error(`Mock lavfi 실패: ${e.message}`)))
+        .run();
+    });
+  }
+
+  // EC2: 기존 영상 파일 복사
   for (const src of MOCK_SOURCE_PATHS) {
     if (fs.existsSync(src)) {
       fs.copyFileSync(src, outputPath);
-      console.log(`[fal] Mock 영상 복사 완료: Scene ${sceneOrder} ← ${path.basename(src)}`);
+      console.log(`[fal] Mock 복사 완료: Scene ${sceneOrder}`);
       return;
     }
   }
 
-  // 기존 파일 없으면 최소 유효 MP4 바이너리 생성
-  // ftyp + mdat 헤더만 있는 5초짜리 최소 MP4 (재생 불가하지만 파일로는 유효)
-  const minMp4 = Buffer.from(
-    '000000206674797069736F6D0000020069736F6D69736F32617663316D703431' +
-    '00000000' + // mdat box (empty)
-    '6D646174',
-    'hex'
+  // 최소 MP4 바이너리 (파일 존재 확인용)
+  fs.writeFileSync(outputPath,
+    Buffer.from('000000206674797069736F6D0000020069736F6D69736F32617663316D703431000000006D646174', 'hex')
   );
-  fs.writeFileSync(outputPath, minMp4);
-  console.log(`[fal] Mock 최소 MP4 생성: Scene ${sceneOrder}`);
+  console.log(`[fal] Mock 최소 MP4: Scene ${sceneOrder}`);
 }
 
 // ── 파일 다운로드 ─────────────────────────────────────────────────────────────
