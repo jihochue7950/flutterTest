@@ -38,15 +38,22 @@ async function generateVideo({ prompt, characterSheetUrl, prevFrameUrl, duration
   }
 
   // 실제 fal.ai 호출 — queue.submit + 폴링 방식
+
   const { fal } = require('@fal-ai/client');
   fal.config({ credentials: FAL_KEY() });
 
   const baseModel = FAL_MODEL();
-  const imageUrl  = prevFrameUrl || characterSheetUrl || null;
-  const endpoint  = _resolveEndpoint(baseModel, !!imageUrl);
+
+  // 로컬 이미지(localhost URL 또는 로컬 경로)는 fal.ai 스토리지에 먼저 업로드
+  const rawImageUrl = prevFrameUrl || characterSheetUrl || null;
+  const publicImageUrl = rawImageUrl
+    ? await _toPublicUrl(rawImageUrl, fal)
+    : null;
+
+  const endpoint = _resolveEndpoint(baseModel, !!publicImageUrl);
   console.log(`[fal] 실제 API 호출: ${endpoint} / Scene ${sceneOrder}`);
 
-  const input = _buildFalInput({ model: endpoint, prompt, characterSheetUrl, prevFrameUrl, durationSeconds });
+  const input = _buildFalInput({ model: endpoint, prompt, characterSheetUrl: publicImageUrl, prevFrameUrl: null, durationSeconds });
 
   // 1. 작업 제출
   const submitted = await fal.queue.submit(endpoint, { input });
@@ -85,6 +92,35 @@ async function generateVideo({ prompt, characterSheetUrl, prevFrameUrl, duration
     videoUrl:     `${serverBase}/uploads${relUrl}`,
     falRequestId: requestId,
   };
+}
+
+// ── 로컬 이미지 → fal.ai 스토리지 업로드 (공개 URL 반환) ─────────────────────
+async function _toPublicUrl(imageUrl, falClient) {
+  // 이미 공개 HTTPS URL이면 그대로 사용
+  if (imageUrl && imageUrl.startsWith('https://')) return imageUrl;
+
+  // 로컬 URL → 파일 경로로 변환
+  let localPath = imageUrl;
+  if (imageUrl && imageUrl.startsWith('http://')) {
+    const serverBase = process.env.SERVER_BASE_URL || 'http://localhost:5001';
+    const relPath    = imageUrl.replace(serverBase + '/uploads', '');
+    const uploadBase = process.env.UPLOAD_BASE_PATH || path.join(__dirname, '../../uploads');
+    localPath = path.join(uploadBase, relPath);
+  }
+
+  if (!localPath || !fs.existsSync(localPath)) {
+    console.warn(`[fal] 이미지 파일 없음: ${localPath} → text-to-video로 전환`);
+    return null;
+  }
+
+  console.log(`[fal] 이미지 fal.ai 스토리지 업로드 중: ${path.basename(localPath)}`);
+  const fileBuffer  = fs.readFileSync(localPath);
+  const ext         = path.extname(localPath).toLowerCase();
+  const contentType = ext === '.png' ? 'image/png' : 'image/jpeg';
+  const blob        = new Blob([fileBuffer], { type: contentType });
+  const publicUrl   = await falClient.storage.upload(blob);
+  console.log(`[fal] 업로드 완료: ${publicUrl}`);
+  return publicUrl;
 }
 
 // ── 엔드포인트 결정 (이미지 유무에 따라 text/image suffix) ──────────────────────
