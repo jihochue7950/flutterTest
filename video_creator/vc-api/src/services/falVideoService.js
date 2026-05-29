@@ -78,7 +78,7 @@ async function generateVideo({ prompt, characterSheetUrl, prevFrameUrl, duration
   if (!result) throw new Error('fal.ai 생성 타임아웃 (10분 초과)');
 
   // 3. 결과 영상 URL 파싱
-  const generatedUrl = _parseVideoUrl(result, model);
+  const generatedUrl = _parseVideoUrl(result, endpoint);
   if (!generatedUrl) throw new Error(`fal.ai 응답에서 영상 URL 없음: ${JSON.stringify(result).slice(0,200)}`);
 
   console.log(`[fal] Scene ${sceneOrder} 영상 URL: ${generatedUrl.slice(0, 80)}`);
