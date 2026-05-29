@@ -68,21 +68,23 @@ export default function AIVideoDetail() {
         <button className="aiv-btn-secondary" onClick={() => navigate('/admin/ai-video')}>← 목록</button>
       </div>
 
-      {/* 캐릭터 시트 */}
+      {/* 캐릭터 시트 + 공통 스타일 요약 */}
       <section className="aiv-section">
-        <h2>캐릭터 시트</h2>
-        <div className="aiv-char-row">
-          {project.character_sheet_url
-            ? <img src={project.character_sheet_url} alt="캐릭터 시트" className="aiv-char-img" />
-            : <div className="aiv-no-char">캐릭터 시트 없음</div>}
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           <div>
-            <label className="aiv-btn-secondary" style={{ cursor: 'pointer', display:'inline-block' }}>
-              <input type="file" accept="image/*" hidden onChange={e => setCharFile(e.target.files[0])} />
-              {charFile ? charFile.name : '파일 선택'}
-            </label>
-            {charFile && <button className="aiv-btn-primary" style={{ marginLeft: 8 }} onClick={handleCharUpload}>업로드</button>}
-            <p className="aiv-hint" style={{ marginTop: 8 }}>모든 장면의 캐릭터 레퍼런스로 사용됩니다.</p>
+            <h2 style={{ marginBottom: 10 }}>캐릭터 시트</h2>
+            {project.character_sheet_url
+              ? <img src={project.character_sheet_url} alt="캐릭터 시트" className="aiv-char-img" />
+              : <div className="aiv-no-char">없음 — 프로젝트 생성 시 업로드</div>}
           </div>
+          {project.global_prompt && (
+            <div style={{ flex: 1 }}>
+              <h2 style={{ marginBottom: 10 }}>공통 스타일</h2>
+              <div style={{ background: '#f8f9fa', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#555', lineHeight: 1.7 }}>
+                {project.global_prompt}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

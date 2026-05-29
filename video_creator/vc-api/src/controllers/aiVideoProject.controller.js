@@ -35,10 +35,10 @@ const getProject = async (req, res) => {
 // POST /api/admin/ai-video-projects  (multer: character_sheet 처리 후)
 const createProject = async (req, res) => {
   try {
-    const { title, description, fal_model } = req.body;
+    const { title, description, fal_model, global_prompt, character_description } = req.body;
     if (!title) return err(res, '제목은 필수입니다.', 400);
 
-    const project = await AiVideoProject.create({ title, description, fal_model });
+    const project = await AiVideoProject.create({ title, description, fal_model, global_prompt, character_description });
 
     // 캐릭터 시트 업로드 (있을 때)
     if (req.file) {

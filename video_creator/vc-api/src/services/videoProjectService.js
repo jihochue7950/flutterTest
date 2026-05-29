@@ -13,12 +13,24 @@ const SERVER_BASE = () => process.env.SERVER_BASE_URL   || 'http://localhost:500
 /**
  * 프롬프트 빌드
  */
-function buildPrompt(scene, isFirstScene) {
-  const lines = [
-    'Use the provided character sheet as the main character reference.',
-    'Keep the same character identity, face, body proportions, and animation style across all scenes.',
-  ];
+function buildPrompt(scene, isFirstScene, project) {
+  const lines = [];
 
+  // 1. 공통 스타일 (global_prompt) — 모든 장면 앞에 추가
+  if (project?.global_prompt) {
+    lines.push(`Global Style: ${project.global_prompt}`);
+  }
+
+  // 2. 캐릭터 레퍼런스 고정 문구
+  lines.push('Use the provided character sheet as the main character reference.');
+  lines.push('Keep the same character identity, face, body proportions, and animation style across all scenes.');
+
+  // 3. 캐릭터 설명 (있을 때)
+  if (project?.character_description) {
+    lines.push(`Character: ${project.character_description}`);
+  }
+
+  // 4. 연속성 문구 (2번 장면부터)
   if (!isFirstScene) {
     lines.push(
       'This scene continues directly from the previous video.',
@@ -26,6 +38,7 @@ function buildPrompt(scene, isFirstScene) {
     );
   }
 
+  // 5. 장면 내용
   lines.push(
     `Scene: ${scene.resolved_scenario || scene.scenario}`,
     `Duration: ${scene.duration_seconds} seconds.`,
@@ -75,7 +88,7 @@ async function generateAllScenes(projectId) {
 
     // 2. 프롬프트 빌드
     const isFirstScene = scene.scene_order === scenes[0].scene_order;
-    const prompt       = buildPrompt(resolvedScene, isFirstScene);
+    const prompt       = buildPrompt(resolvedScene, isFirstScene, project);
 
     // 3. DB: generating 상태로 변경
     await AiVideoScene.updateGenerating(scene.id, { ...resolved, prompt });

@@ -26,9 +26,10 @@ const AiVideoProjectModel = {
 
   async create({ title, description, fal_model }) {
     const [result] = await db.query(
-      `INSERT INTO ai_video_projects (title, description, fal_model)
-       VALUES (?, ?, ?)`,
-      [title, description || null, fal_model || 'fal-ai/kling-video/v1/pro']
+      `INSERT INTO ai_video_projects (title, description, global_prompt, character_description, fal_model)
+       VALUES (?, ?, ?, ?, ?)`,
+      [title, description || null, global_prompt || null, character_description || null,
+       fal_model || 'fal-ai/kling-video/o1/reference-to-video']
     );
     return this.findById(result.insertId);
   },
