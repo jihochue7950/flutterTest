@@ -106,8 +106,14 @@ async function generateAllScenes(projectId) {
         console.warn(`[videoProject] 마지막 프레임 추출 실패 (Scene ${scene.scene_order}):`, e.message);
       }
 
-      // 7. DB: done 저장
-      await AiVideoScene.updateDone(scene.id, { videoUrl, videoPath, lastFrameUrl, lastFramePath, falRequestId });
+      // 7. DB: done 저장 (snake_case로 전달)
+      await AiVideoScene.updateDone(scene.id, {
+        video_url:       videoUrl,
+        video_path:      videoPath,
+        last_frame_url:  lastFrameUrl,
+        last_frame_path: lastFramePath,
+        fal_request_id:  falRequestId,
+      });
       await AiVideoProject.incrementCompleted(projectId);
       doneCount++;
 

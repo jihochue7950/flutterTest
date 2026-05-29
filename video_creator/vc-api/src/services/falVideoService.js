@@ -104,26 +104,33 @@ function _parseVideoUrl(result, model) {
       || null;
 }
 
-// ── Mock: ffmpeg로 텍스트 영상 생성 ──────────────────────────────────────────
-function _generateMockVideo({ sceneOrder, prompt, durationSeconds, outputPath }) {
-  return new Promise((resolve, reject) => {
-    const text    = `Scene ${sceneOrder}`;
-    const subtext = (prompt || '').slice(0, 60).replace(/'/g, '');
+// ── Mock: 기존 영상 파일 복사 (메모리 절약) ──────────────────────────────────
+// EC2에 기존 영상이 있으면 복사, 없으면 최소 MP4 파일 생성
+const MOCK_SOURCE_PATHS = [
+  '/var/www/ai-proposal/videos/1778829475816_e8660170.mp4',
+  '/var/www/ai-proposal/videos/1778827295918_1476c53b.mp4',
+];
 
-    ffmpeg()
-      .input(`color=c=0x1a1a2e:size=1280x720:rate=24:duration=${durationSeconds}`)
-      .inputOptions(['-f lavfi'])
-      .videoFilter([
-        `drawtext=text='${text}':fontsize=64:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2-40`,
-        `drawtext=text='${subtext}':fontsize=24:fontcolor=0xaaaaaa:x=(w-text_w)/2:y=(h-text_h)/2+40`,
-        `drawtext=text='[MOCK MODE]':fontsize=20:fontcolor=yellow:x=10:y=10`,
-      ])
-      .outputOptions(['-c:v libx264', '-pix_fmt yuv420p', '-an'])
-      .output(outputPath)
-      .on('end', resolve)
-      .on('error', (e) => reject(new Error(`Mock 영상 생성 실패: ${e.message}`)))
-      .run();
-  });
+async function _generateMockVideo({ sceneOrder, prompt, durationSeconds, outputPath }) {
+  // 기존 영상 파일 복사 (ffmpeg 없이)
+  for (const src of MOCK_SOURCE_PATHS) {
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, outputPath);
+      console.log(`[fal] Mock 영상 복사 완료: Scene ${sceneOrder} ← ${path.basename(src)}`);
+      return;
+    }
+  }
+
+  // 기존 파일 없으면 최소 유효 MP4 바이너리 생성
+  // ftyp + mdat 헤더만 있는 5초짜리 최소 MP4 (재생 불가하지만 파일로는 유효)
+  const minMp4 = Buffer.from(
+    '000000206674797069736F6D0000020069736F6D69736F32617663316D703431' +
+    '00000000' + // mdat box (empty)
+    '6D646174',
+    'hex'
+  );
+  fs.writeFileSync(outputPath, minMp4);
+  console.log(`[fal] Mock 최소 MP4 생성: Scene ${sceneOrder}`);
 }
 
 // ── 파일 다운로드 ─────────────────────────────────────────────────────────────
