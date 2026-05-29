@@ -24,7 +24,7 @@ const AiVideoProjectModel = {
     return rows[0] || null;
   },
 
-  async create({ title, description, fal_model }) {
+  async create({ title, description, global_prompt, character_description, fal_model }) {
     const [result] = await db.query(
       `INSERT INTO ai_video_projects (title, description, global_prompt, character_description, fal_model)
        VALUES (?, ?, ?, ?, ?)`,

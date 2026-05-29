@@ -25,7 +25,7 @@ export default function AIVideoCreate() {
     title: '',
     description: '',
     fal_model: 'fal-ai/kling-video/o1/reference-to-video',
-    global_prompt: '',
+    global_prompt: '3D animation style, Pixar-inspired, vibrant colors, smooth rendering, cinematic quality',
     character_description: '',
   });
   const [file,    setFile]    = useState(null);
