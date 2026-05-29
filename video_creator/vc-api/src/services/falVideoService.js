@@ -37,71 +37,97 @@ async function generateVideo({ prompt, characterSheetUrl, prevFrameUrl, duration
     return { videoPath: outputPath, videoUrl: `${serverBase}/uploads${relUrl}`, falRequestId: null };
   }
 
-  // 실제 fal.ai 호출
+  // 실제 fal.ai 호출 — queue.submit + 폴링 방식
   const { fal } = require('@fal-ai/client');
   fal.config({ credentials: FAL_KEY() });
 
-  const model = FAL_MODEL();
-  console.log(`[fal] 실제 API 호출: ${model} / Scene ${sceneOrder}`);
+  const baseModel = FAL_MODEL();
+  const imageUrl  = prevFrameUrl || characterSheetUrl || null;
+  const endpoint  = _resolveEndpoint(baseModel, !!imageUrl);
+  console.log(`[fal] 실제 API 호출: ${endpoint} / Scene ${sceneOrder}`);
 
-  // 모델별 입력 구조
-  const input = _buildFalInput({ model, prompt, characterSheetUrl, prevFrameUrl, durationSeconds });
+  const input = _buildFalInput({ model: endpoint, prompt, characterSheetUrl, prevFrameUrl, durationSeconds });
 
-  const result = await fal.subscribe(model, {
-    input,
-    logs: true,
-    onQueueUpdate: (update) => {
-      if (update.status === 'IN_PROGRESS') console.log(`[fal] Scene ${sceneOrder} 생성 중...`);
-    },
-  });
+  // 1. 작업 제출
+  const submitted = await fal.queue.submit(endpoint, { input });
+  const requestId = submitted.request_id;
+  console.log(`[fal] Scene ${sceneOrder} 제출 완료 (request_id: ${requestId})`);
 
-  // 결과 영상 URL 파싱 (모델마다 응답 구조 다름)
+  // 2. 완료까지 폴링 (최대 10분, 10초 간격)
+  let result = null;
+  const maxTries = 60;
+  for (let i = 0; i < maxTries; i++) {
+    await new Promise(r => setTimeout(r, 10000)); // 10초 대기
+    const status = await fal.queue.status(endpoint, { requestId, logs: true });
+    console.log(`[fal] Scene ${sceneOrder} 상태: ${status.status} (${i + 1}/${maxTries})`);
+    if (status.status === 'COMPLETED') {
+      result = await fal.queue.result(endpoint, { requestId });
+      break;
+    }
+    if (status.status === 'FAILED') {
+      throw new Error(`fal.ai 생성 실패: ${JSON.stringify(status.error || 'unknown')}`);
+    }
+  }
+  if (!result) throw new Error('fal.ai 생성 타임아웃 (10분 초과)');
+
+  // 3. 결과 영상 URL 파싱
   const generatedUrl = _parseVideoUrl(result, model);
-  if (!generatedUrl) throw new Error('fal.ai 응답에서 영상 URL을 찾을 수 없습니다.');
+  if (!generatedUrl) throw new Error(`fal.ai 응답에서 영상 URL 없음: ${JSON.stringify(result).slice(0,200)}`);
 
-  // 영상 다운로드 후 서버에 저장
+  console.log(`[fal] Scene ${sceneOrder} 영상 URL: ${generatedUrl.slice(0, 80)}`);
+
+  // 4. 영상 다운로드 → 서버 저장
   await _downloadFile(generatedUrl, outputPath);
   const relUrl = outputPath.replace(process.env.UPLOAD_BASE_PATH || '', '').replace(/\\/g, '/');
 
   return {
     videoPath:    outputPath,
     videoUrl:     `${serverBase}/uploads${relUrl}`,
-    falRequestId: result.requestId || null,
+    falRequestId: requestId,
   };
+}
+
+// ── 엔드포인트 결정 (이미지 유무에 따라 text/image suffix) ──────────────────────
+function _resolveEndpoint(model, hasImage) {
+  if (model.includes('/text-to-video') || model.includes('/image-to-video') ||
+      model.includes('o1/reference')) return model;
+  if (model.includes('kling-video')) {
+    return model + (hasImage ? '/image-to-video' : '/text-to-video');
+  }
+  return model;
 }
 
 // ── 모델별 입력 구조 빌드 ──────────────────────────────────────────────────────
 function _buildFalInput({ model, prompt, characterSheetUrl, prevFrameUrl, durationSeconds }) {
   const imageUrl = prevFrameUrl || characterSheetUrl || null;
-  const dur      = durationSeconds <= 5 ? 5 : 10; // Kling은 5초 or 10초만 지원
+  const dur      = durationSeconds <= 5 ? '5' : '10'; // Kling은 문자열 '5' or '10'
 
-  if (model.includes('kling-video/o1/reference')) {
+  if (model.includes('o1/reference')) {
     const refs = [characterSheetUrl, prevFrameUrl].filter(Boolean);
-    return { prompt, duration: String(dur), reference_images: refs };
+    return { prompt, duration: dur, reference_images: refs };
   }
 
   if (model.includes('kling-video')) {
-    // Kling v1.5/v1.6/v2.1/v3: image_url은 선택
-    const input = { prompt, duration: String(dur) };
-    if (imageUrl) input.image_url = imageUrl;
+    const input = { prompt, duration: dur };
+    if (imageUrl) {
+      // v3 image-to-video는 start_image_url 사용
+      input[model.includes('v3') && model.includes('image-to-video') ? 'start_image_url' : 'image_url'] = imageUrl;
+    }
     return input;
   }
 
-  if (model.includes('wan')) {
-    return { prompt, ...(imageUrl ? { image_url: imageUrl } : {}) };
-  }
-
-  // 기본 (luma, pixverse 등)
   return { prompt, ...(imageUrl ? { image_url: imageUrl } : {}) };
 }
 
-// ── 응답에서 videoUrl 파싱 ────────────────────────────────────────────────────
+// ── 응답에서 videoUrl 파싱 (모델마다 구조 다름) ──────────────────────────────
 function _parseVideoUrl(result, model) {
-  // 일반적인 응답 구조들
+  // Kling, WAN 등 일반적인 구조
   return result?.video?.url
       || result?.output?.video?.url
+      || result?.data?.video?.url
       || result?.videos?.[0]?.url
       || result?.url
+      || (typeof result === 'string' && result.startsWith('http') ? result : null)
       || null;
 }
 
