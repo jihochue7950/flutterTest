@@ -9,7 +9,9 @@ const photosRoutes    = require('./routes/photos.routes');
 const musicRoutes     = require('./routes/music.routes');
 const scenarioRoutes  = require('./routes/scenario.routes');
 const renderRoutes    = require('./routes/render.routes');
-const adminRoutes     = require('./routes/admin.routes');
+const adminRoutes          = require('./routes/admin.routes');
+const aiVideoProjectRoutes = require('./routes/aiVideoProject.routes');
+const aiVideoSceneRoutes   = require('./routes/aiVideoScene.routes');
 
 const app = express();
 
@@ -32,6 +34,10 @@ app.use('/api/music-library',   musicRoutes);      // 음악 라이브러리 조
 
 // ── 관리자 API ────────────────────────────────────
 app.use('/api/admin', adminRoutes);
+
+// ── Team D: AI 영상 제작 (fal.ai 기반) ───────────
+app.use('/api/admin/ai-video-projects', aiVideoProjectRoutes);
+app.use('/api/admin/ai-video-scenes',   aiVideoSceneRoutes);
 
 // 헬스체크
 app.get('/health', (req, res) => res.json({

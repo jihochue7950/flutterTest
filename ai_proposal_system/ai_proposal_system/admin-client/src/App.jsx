@@ -9,6 +9,12 @@ import OrderPage from './pages/public/OrderPage';
 import OrderCompletePage from './pages/public/OrderCompletePage';
 import DownloadPage from './pages/public/DownloadPage';
 
+// Team D — AI 영상 제작 관리 (fal.ai 기반)
+import AIVideoList    from './pages/ai-video/AIVideoList';
+import AIVideoCreate  from './pages/ai-video/AIVideoCreate';
+import AIVideoDetail  from './pages/ai-video/AIVideoDetail';
+import AIVideoMonitor from './pages/ai-video/AIVideoMonitor';
+
 // Team D — 영상 제작 (공개 + 관리자)
 import VideoCreatorWizard  from './pages/video-creator/VideoCreatorWizard';
 import PhotoUploadPage     from './pages/video-creator/PhotoUploadPage';
@@ -65,8 +71,14 @@ export default function App() {
         <Route path="/video-creator/:id/scenario"         element={<ScenarioPage />} />
         <Route path="/video-creator/:id/preview"          element={<PreviewPage />} />
 
-        {/* ── Team D: 관리자 영상 관리 ── */}
+        {/* ── Team D: 관리자 영상 관리 (기존 photo slideshow) ── */}
         <Route path="/admin/video-projects" element={<AdminRoute><AdminVideoProjects /></AdminRoute>} />
+
+        {/* ── Team D: AI 영상 제작 관리 (fal.ai 기반) ── */}
+        <Route path="/admin/ai-video"            element={<AdminRoute><AIVideoList /></AdminRoute>} />
+        <Route path="/admin/ai-video/create"     element={<AdminRoute><AIVideoCreate /></AdminRoute>} />
+        <Route path="/admin/ai-video/:id"        element={<AdminRoute><AIVideoDetail /></AdminRoute>} />
+        <Route path="/admin/ai-video/:id/monitor" element={<AdminRoute><AIVideoMonitor /></AdminRoute>} />
 
         {/* 구 경로 → /admin 리다이렉트 (북마크 호환) */}
         <Route path="/login" element={<Navigate to="/admin/login" replace />} />
