@@ -10,10 +10,11 @@
 # 주의:
 #   - ecosystem.config.js 는 EC2 실값이 따로 관리되므로 배포 제외
 #   - .env 파일도 배포 제외 (EC2에서 직접 관리)
+#   - SSH 연결은 ~/.ssh/config 의 'flutterproject' alias 사용
+#     (pem 키 별도 지정 불필요)
 # ============================================================
 
-PEM=~/Desktop/flutterProject.pem
-EC2=ubuntu@3.34.99.69
+EC2=flutterproject   # ~/.ssh/config alias
 TARGET=${1:-all}
 
 echo "🚀 FLUTTERPROJECT 배포 시작 (target: $TARGET)"
@@ -21,42 +22,37 @@ echo ""
 
 deploy_server() {
   echo "── [1/2] server/ 배포 ──────────────────────────────"
-  scp -i "$PEM" -o StrictHostKeyChecking=no \
+  scp \
     server/server.js \
     server/local_server.js \
     server/package.json \
     "$EC2":/home/ubuntu/server/
 
   echo "   npm install (신규 패키지 있을 경우)"
-  ssh -i "$PEM" -o StrictHostKeyChecking=no "$EC2" \
-    "cd /home/ubuntu/server && npm install --production 2>&1 | tail -3"
+  ssh "$EC2" "cd /home/ubuntu/server && npm install --production 2>&1 | tail -3"
 
   echo "   pm2 restart ai-proposal-server"
-  ssh -i "$PEM" -o StrictHostKeyChecking=no "$EC2" \
-    "cd /home/ubuntu/server && pm2 restart ai-proposal-server && sleep 2 && pm2 status"
+  ssh "$EC2" "cd /home/ubuntu/server && pm2 restart ai-proposal-server && sleep 2 && pm2 status"
 
   echo "   ✅ server 배포 완료"
 }
 
 deploy_admin() {
   echo "── [2/2] ai_proposal_system/ 배포 ─────────────────"
-  # admin-server 소스 배포 (.env 제외)
-  scp -i "$PEM" -o StrictHostKeyChecking=no -r \
+  scp -r \
     ai_proposal_system/ai_proposal_system/admin-server/src \
     ai_proposal_system/ai_proposal_system/admin-server/package.json \
     "$EC2":/home/ubuntu/ai_proposal_system/admin-server/
 
-  # admin-client 빌드 후 배포
   echo "   admin-client 빌드 중..."
   (cd ai_proposal_system/ai_proposal_system/admin-client && npm run build 2>&1 | tail -5)
 
-  scp -i "$PEM" -o StrictHostKeyChecking=no -r \
+  scp -r \
     ai_proposal_system/ai_proposal_system/admin-client/build \
     "$EC2":/home/ubuntu/ai_proposal_system/admin-client/
 
   echo "   npm install + pm2 restart ai-proposal-admin"
-  ssh -i "$PEM" -o StrictHostKeyChecking=no "$EC2" \
-    "cd /home/ubuntu/ai_proposal_system/admin-server && npm install --production 2>&1 | tail -3 && pm2 restart ai-proposal-admin && sleep 2 && pm2 status"
+  ssh "$EC2" "cd /home/ubuntu/ai_proposal_system/admin-server && npm install --production 2>&1 | tail -3 && pm2 restart ai-proposal-admin && sleep 2 && pm2 status"
 
   echo "   ✅ admin 배포 완료"
 }
