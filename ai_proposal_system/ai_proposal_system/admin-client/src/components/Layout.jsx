@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 const navItems = [
-  { path: '/admin/dashboard', label: '대시보드', icon: '📊' },
-  { path: '/admin/products', label: '상품 관리', icon: '📦' },
-  { path: '/admin/orders', label: '주문 관리', icon: '🛒' },
-  { path: '/admin/users', label: '세션 사용자', icon: '👤' },
+  { path: '/admin/dashboard',    label: '대시보드',     icon: '📊' },
+  { path: '/admin/products',     label: '상품 관리',    icon: '📦' },
+  { path: '/admin/orders',       label: '주문 관리',    icon: '🛒' },
+  { path: '/admin/users',        label: '세션 사용자',  icon: '👤' },
+  { path: '/admin/video-projects', label: '영상 관리',  icon: '🎬' },
+  { path: '/admin/ai-video',     label: 'AI 영상 제작', icon: '🤖' },
 ];
 
 export default function Layout({ children }) {
