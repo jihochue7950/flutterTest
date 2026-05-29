@@ -4,7 +4,7 @@ import { createProject } from '../../api/aiVideo';
 import './aiv.css';
 
 const FAL_MODELS = [
-  { value: 'fal-ai/kling-video/v1/pro',                    label: 'Kling V1 Pro — 균형 (추천)' },
+  { value: 'fal-ai/kling-video/v1.6/pro',                    label: 'Kling V1 Pro — 균형 (추천)' },
   { value: 'fal-ai/kling-video/o1/reference-to-video',     label: 'Kling O1 Reference — 캐릭터 일관성 최강' },
   { value: 'fal-ai/kling-video/v3/pro',                    label: 'Kling V3 Pro — 최고 품질' },
   { value: 'fal-ai/wan',                                   label: 'WAN — 저렴한 대안' },
@@ -12,7 +12,7 @@ const FAL_MODELS = [
 
 export default function AIVideoCreate() {
   const navigate = useNavigate();
-  const [form,    setForm]    = useState({ title: '', description: '', fal_model: 'fal-ai/kling-video/v1/pro' });
+  const [form,    setForm]    = useState({ title: '', description: '', fal_model: 'fal-ai/kling-video/v1.6/pro' });
   const [file,    setFile]    = useState(null);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);

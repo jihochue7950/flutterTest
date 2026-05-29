@@ -10,7 +10,7 @@ const ffmpegPath  = require('ffmpeg-static');
 if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath);
 
 const FAL_KEY   = () => process.env.FAL_KEY || '';
-const FAL_MODEL = () => process.env.FAL_MODEL || 'fal-ai/kling-video/v1/pro';
+const FAL_MODEL = () => process.env.FAL_MODEL || 'fal-ai/kling-video/v1.6/pro';
 
 /**
  * fal.ai API로 영상 생성
@@ -72,26 +72,27 @@ async function generateVideo({ prompt, characterSheetUrl, prevFrameUrl, duration
 
 // ── 모델별 입력 구조 빌드 ──────────────────────────────────────────────────────
 function _buildFalInput({ model, prompt, characterSheetUrl, prevFrameUrl, durationSeconds }) {
-  const base = { prompt, duration: durationSeconds };
+  const imageUrl = prevFrameUrl || characterSheetUrl || null;
+  const dur      = durationSeconds <= 5 ? 5 : 10; // Kling은 5초 or 10초만 지원
 
   if (model.includes('kling-video/o1/reference')) {
-    // Kling O1: reference_images 배열
     const refs = [characterSheetUrl, prevFrameUrl].filter(Boolean);
-    return { ...base, reference_images: refs };
+    return { prompt, duration: String(dur), reference_images: refs };
   }
 
   if (model.includes('kling-video')) {
-    // Kling V1/V2/V3: image_url (이전 프레임 우선, 없으면 캐릭터 시트)
-    return { ...base, image_url: prevFrameUrl || characterSheetUrl };
+    // Kling v1.5/v1.6/v2.1/v3: image_url은 선택
+    const input = { prompt, duration: String(dur) };
+    if (imageUrl) input.image_url = imageUrl;
+    return input;
   }
 
   if (model.includes('wan')) {
-    // WAN: reference_images 배열
-    return { ...base, image_url: prevFrameUrl || characterSheetUrl };
+    return { prompt, ...(imageUrl ? { image_url: imageUrl } : {}) };
   }
 
-  // 기본
-  return { ...base, image_url: prevFrameUrl || characterSheetUrl };
+  // 기본 (luma, pixverse 등)
+  return { prompt, ...(imageUrl ? { image_url: imageUrl } : {}) };
 }
 
 // ── 응답에서 videoUrl 파싱 ────────────────────────────────────────────────────
