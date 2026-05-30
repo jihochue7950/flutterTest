@@ -118,6 +118,19 @@ export default function MVProjectDetail() {
       {msg && <p className="mv-info">{msg}</p>}
       {isBusy && <p className="mv-info">⏳ 처리 중입니다... (자동 갱신 중)</p>}
 
+      {/* ── 업로드 단계: 가사 추출 시작 버튼 ────────────── */}
+      {step === 'upload' && project.music_url && (
+        <div className="mv-section">
+          <div className="mv-info" style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span>✅ 음악 파일과 캐릭터 시트 준비 완료! 이제 가사를 자동으로 추출합니다.</span>
+            <button className="mv-btn-primary"
+              onClick={() => doAction(() => transcribeLyrics(id), '⏳ AI가 가사를 추출하고 있습니다...')}>
+              다음: 가사 자동 추출 시작 →
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── 2단계: 가사 확인/수정 ──────────────────────────────── */}
       {['lyrics_review', 'transcribing'].includes(step) && (
         <div className="mv-section">
