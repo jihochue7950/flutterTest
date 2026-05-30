@@ -8,6 +8,7 @@ const navItems = [
   { path: '/admin/users',        label: '세션 사용자',  icon: '👤' },
   { path: '/admin/video-projects', label: '영상 관리',  icon: '🎬' },
   { path: '/admin/ai-video',     label: 'AI 영상 제작', icon: '🤖' },
+  { path: '/admin/music-video',   label: '뮤직비디오 제작', icon: '🎵' },
 ];
 
 export default function Layout({ children }) {

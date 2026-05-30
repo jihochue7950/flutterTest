@@ -1,0 +1,93 @@
+/* 뮤직비디오 제작 관리자 UI */
+.mv-page    { max-width: 1100px; margin: 0 auto; padding: 32px 24px; font-family: 'Pretendard', sans-serif; }
+.mv-header  { margin-bottom: 28px; }
+.mv-header h1 { font-size: 26px; font-weight: 800; margin-bottom: 6px; }
+.mv-header p  { color: #666; font-size: 15px; }
+
+/* 단계 표시기 */
+.mv-steps { display: flex; gap: 0; margin-bottom: 36px; }
+.mv-step  {
+  flex: 1; text-align: center; padding: 14px 8px;
+  background: #f5f5f5; border: 1px solid #e0e0e0;
+  font-size: 13px; font-weight: 600; color: #aaa; position: relative;
+}
+.mv-step:not(:last-child)::after {
+  content: '▶'; position: absolute; right: -8px; top: 50%;
+  transform: translateY(-50%); color: #ccc; font-size: 10px; z-index: 1;
+}
+.mv-step.active  { background: #e91e63; color: #fff; border-color: #e91e63; }
+.mv-step.done    { background: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
+.mv-step:first-child { border-radius: 10px 0 0 10px; }
+.mv-step:last-child  { border-radius: 0 10px 10px 0; }
+
+/* 섹션 */
+.mv-section { margin-bottom: 32px; }
+.mv-section h2 { font-size: 18px; font-weight: 700; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid #f0f0f0; }
+
+/* 업로드 존 */
+.mv-upload-zone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40px; border: 2px dashed #ccc; border-radius: 14px; cursor: pointer;
+  color: #888; gap: 8px; transition: all 0.2s;
+}
+.mv-upload-zone:hover, .mv-upload-zone.has-file { border-color: #e91e63; color: #e91e63; }
+.mv-upload-zone small { font-size: 12px; color: #bbb; }
+.mv-upload-done { font-size: 14px; color: #2e7d32; font-weight: 600; }
+
+/* 입력 */
+.mv-input    { width: 100%; padding: 12px 14px; border: 2px solid #e5e5ea; border-radius: 10px; font-size: 14px; outline: none; box-sizing: border-box; }
+.mv-input:focus { border-color: #e91e63; }
+.mv-textarea { width: 100%; padding: 14px; border: 2px solid #e5e5ea; border-radius: 10px; font-size: 14px; resize: vertical; font-family: inherit; box-sizing: border-box; line-height: 1.8; }
+.mv-textarea:focus { border-color: #e91e63; outline: none; }
+.mv-field  { margin-bottom: 20px; }
+.mv-field label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.mv-hint   { font-size: 12px; color: #999; margin-top: 4px; }
+.mv-error  { color: #e53935; font-size: 14px; margin-top: 8px; }
+.mv-info   { color: #1565c0; font-size: 14px; background: #e3f2fd; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; }
+.mv-success{ color: #2e7d32; font-size: 14px; background: #e8f5e9; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; }
+
+/* 버튼 */
+.mv-btn-primary   { padding: 14px 28px; background: linear-gradient(135deg,#e91e63,#9c27b0); color: #fff; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block; }
+.mv-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.mv-btn-secondary { padding: 12px 22px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; cursor: pointer; }
+.mv-btn-outline   { padding: 10px 20px; background: #fff; color: #e91e63; border: 2px solid #e91e63; border-radius: 10px; font-size: 14px; cursor: pointer; }
+.mv-btn-sm        { padding: 5px 12px; border-radius: 6px; font-size: 12px; border: none; cursor: pointer; background: #eee; }
+.mv-btn-regen     { background: #fff3e0; color: #e65100; }
+.mv-btn-del       { background: #ffebee; color: #c62828; }
+.mv-actions { display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+
+/* 장면 그리드 */
+.mv-scene-grid { display: flex; flex-direction: column; gap: 16px; }
+.mv-scene-card { border: 1px solid #e5e5ea; border-radius: 12px; overflow: hidden; }
+.mv-scene-header { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.mv-scene-num    { width: 32px; height: 32px; border-radius: 50%; background: #e91e63; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.mv-scene-time   { font-size: 12px; color: #aaa; margin-left: auto; }
+.mv-scene-body   { padding: 14px 16px; }
+.mv-scene-lyrics { font-size: 13px; color: #777; font-style: italic; margin-bottom: 8px; }
+
+/* 이미지 그리드 */
+.mv-image-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.mv-image-card  { border: 2px solid #e5e5ea; border-radius: 12px; overflow: hidden; }
+.mv-image-card.done    { border-color: #4caf50; }
+.mv-image-card.failed  { border-color: #f44336; }
+.mv-image-card.generating { border-color: #ff9800; }
+.mv-image-thumb { width: 100%; height: 160px; object-fit: cover; display: block; background: #f5f5f5; }
+.mv-image-body  { padding: 10px 12px; }
+.mv-image-prompt { font-size: 11px; color: #888; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-bottom: 8px; }
+.mv-image-actions { display: flex; gap: 6px; }
+.mv-status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.mv-status-pending    { background: #f0f0f0; color: #666; }
+.mv-status-generating { background: #fff3e0; color: #e65100; }
+.mv-status-done       { background: #e8f5e9; color: #2e7d32; }
+.mv-status-failed     { background: #ffebee; color: #c62828; }
+
+/* 진행률 */
+.mv-progress-track { height: 10px; background: #eee; border-radius: 5px; overflow: hidden; margin: 8px 0; }
+.mv-progress-fill  { height: 100%; background: linear-gradient(90deg, #e91e63, #9c27b0); border-radius: 5px; transition: width 0.5s; }
+
+/* 최종 영상 */
+.mv-final-video { max-width: 720px; width: 100%; border-radius: 14px; }
+.mv-table-wrap  { overflow-x: auto; }
+.mv-table       { width: 100%; border-collapse: collapse; font-size: 14px; }
+.mv-table th    { background: #f8f9fa; padding: 12px; text-align: left; border-bottom: 2px solid #e5e5ea; font-weight: 700; }
+.mv-table td    { padding: 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }

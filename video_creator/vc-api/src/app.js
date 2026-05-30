@@ -39,6 +39,10 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/admin/ai-video-projects', aiVideoProjectRoutes);
 app.use('/api/admin/ai-video-scenes',   aiVideoSceneRoutes);
 
+// ── Team D: 뮤직비디오 제작 (5단계 자동화) ────────
+const mvProjectRoutes = require('./routes/mvProject.routes');
+app.use('/api/admin/mv-projects', mvProjectRoutes);
+
 // 헬스체크
 app.get('/health', (req, res) => res.json({
   status: 'ok',

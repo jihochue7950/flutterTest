@@ -9,6 +9,11 @@ import OrderPage from './pages/public/OrderPage';
 import OrderCompletePage from './pages/public/OrderCompletePage';
 import DownloadPage from './pages/public/DownloadPage';
 
+// Team D — 뮤직비디오 제작
+import MVProjectList   from './pages/music-video/MVProjectList';
+import MVProjectCreate from './pages/music-video/MVProjectCreate';
+import MVProjectDetail from './pages/music-video/MVProjectDetail';
+
 // Team D — AI 영상 제작 관리 (fal.ai 기반)
 import AIVideoList    from './pages/ai-video/AIVideoList';
 import AIVideoCreate  from './pages/ai-video/AIVideoCreate';
@@ -79,6 +84,11 @@ export default function App() {
         <Route path="/admin/ai-video/create"     element={<AdminRoute><AIVideoCreate /></AdminRoute>} />
         <Route path="/admin/ai-video/:id"        element={<AdminRoute><AIVideoDetail /></AdminRoute>} />
         <Route path="/admin/ai-video/:id/monitor" element={<AdminRoute><AIVideoMonitor /></AdminRoute>} />
+
+        {/* ── Team D: 뮤직비디오 제작 ── */}
+        <Route path="/admin/music-video"         element={<AdminRoute><MVProjectList   /></AdminRoute>} />
+        <Route path="/admin/music-video/create"  element={<AdminRoute><MVProjectCreate /></AdminRoute>} />
+        <Route path="/admin/music-video/:id"     element={<AdminRoute><MVProjectDetail /></AdminRoute>} />
 
         {/* 구 경로 → /admin 리다이렉트 (북마크 호환) */}
         <Route path="/login" element={<Navigate to="/admin/login" replace />} />
