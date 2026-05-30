@@ -19,9 +19,11 @@ const upload = multer({
 
 // 프로젝트
 router.get ('/',    ctrl.listProjects);
-router.post('/',    upload.fields([{ name: 'music', maxCount: 1 }, { name: 'character_sheet', maxCount: 1 }]), ctrl.createProject);
+router.post('/', upload.fields([{ name: 'music', maxCount: 1 }]), ctrl.createProject);
 router.get ('/:id', ctrl.getProject);
 router.get ('/:id/status', ctrl.getStatus);
+router.post('/:id/character-sheets', upload.single('character_sheet'), ctrl.addCharacterSheet);
+router.delete('/:id/character-sheets/:sheetId', ctrl.deleteCharacterSheet);
 
 // 단계별
 router.post('/:id/transcribe',         ctrl.transcribeLyrics);   // 1→2: 가사 추출

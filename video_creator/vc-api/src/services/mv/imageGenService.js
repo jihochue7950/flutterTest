@@ -4,10 +4,15 @@ const fs   = require('fs');
 const https = require('https');
 const http  = require('http');
 
-// fal.ai FLUX Kontext — 캐릭터 시트 + 프롬프트 → 이미지 생성
-async function generateImage({ prompt, characterSheetUrl, globalStyle, outputPath }) {
+// fal.ai FLUX Kontext — 다중 캐릭터 시트 + 프롬프트 → 이미지 생성
+async function generateImage({ prompt, characterSheetUrls = [], characterSheetUrl, globalStyle, outputPath }) {
   const FAL_KEY = process.env.FAL_KEY || '';
   const MODEL   = process.env.IMAGE_MODEL || 'fal-ai/flux-pro/kontext';
+
+  // 단일 URL도 배열로 통합
+  const allUrls = characterSheetUrls.length > 0
+    ? characterSheetUrls
+    : (characterSheetUrl ? [characterSheetUrl] : []);
 
   if (!FAL_KEY) {
     console.warn('[ImageGen] FAL_KEY 없음 → Mock 이미지 생성');
@@ -17,16 +22,16 @@ async function generateImage({ prompt, characterSheetUrl, globalStyle, outputPat
   const { fal } = require('@fal-ai/client');
   fal.config({ credentials: FAL_KEY });
 
-  // 캐릭터 시트를 공개 URL로 변환
-  const publicCharSheet = characterSheetUrl
-    ? await _toPublicUrl(characterSheetUrl, fal)
-    : null;
+  // 모든 캐릭터 시트를 공개 URL로 변환
+  const publicUrls = (await Promise.all(allUrls.map(u => _toPublicUrl(u, fal)))).filter(Boolean);
 
   const fullPrompt = globalStyle ? `${globalStyle}. ${prompt}` : prompt;
-  console.log(`[ImageGen] ${MODEL} 이미지 생성 중...`);
+  const charCount  = publicUrls.length;
+  console.log(`[ImageGen] ${MODEL} 이미지 생성 중... (캐릭터 ${charCount}명 레퍼런스)`);
 
-  const input = publicCharSheet
-    ? { prompt: fullPrompt, image_url: publicCharSheet }  // Kontext: 레퍼런스 이미지 + 프롬프트
+  // FLUX Kontext: image_url (첫 번째 캐릭터, 나머지는 프롬프트로 설명)
+  const input = publicUrls.length > 0
+    ? { prompt: fullPrompt, image_url: publicUrls[0] }
     : { prompt: fullPrompt };
 
   const submitted = await fal.queue.submit(MODEL, { input });

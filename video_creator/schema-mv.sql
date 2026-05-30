@@ -108,3 +108,17 @@ CREATE TABLE IF NOT EXISTS mv_images (
   FOREIGN KEY (project_id) REFERENCES mv_projects(id) ON DELETE CASCADE,
   FOREIGN KEY (scene_id)   REFERENCES mv_scenes(id)   ON DELETE CASCADE
 );
+
+-- ─────────────────────────────────────────
+-- 캐릭터 시트 (다중 캐릭터 지원)
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS mv_character_sheets (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  project_id  INT NOT NULL,
+  name        VARCHAR(100) NOT NULL DEFAULT '캐릭터',
+  sheet_url   VARCHAR(500),
+  sheet_path  VARCHAR(500),
+  char_order  INT DEFAULT 0,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES mv_projects(id) ON DELETE CASCADE
+);

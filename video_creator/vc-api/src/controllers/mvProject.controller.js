@@ -4,6 +4,7 @@ const fs               = require('fs');
 const MvProject        = require('../models/mv_project.model');
 const MvScene          = require('../models/mv_scene.model');
 const MvImage          = require('../models/mv_image.model');
+const MvCharSheet      = require('../models/mv_character_sheet.model');
 const whisperSvc       = require('../services/mv/whisperService');
 const breakdownSvc     = require('../services/mv/sceneBreakdownService');
 const imageGenSvc      = require('../services/mv/imageGenService');
@@ -36,8 +37,11 @@ const getProject = async (req, res) => {
   try {
     const p = await MvProject.findById(req.params.id);
     if (!p) return err(res, '없음', 404);
-    const scenes = await MvScene.findByProject(req.params.id);
-    return ok(res, { ...p, scenes });
+    const [scenes, charSheets] = await Promise.all([
+      MvScene.findByProject(req.params.id),
+      MvCharSheet.findByProject(req.params.id),
+    ]);
+    return ok(res, { ...p, scenes, character_sheets: charSheets });
   } catch (e) { return err(res, e.message); }
 };
 
@@ -81,6 +85,35 @@ const createProject = async (req, res) => {
     const updated = await MvProject.findById(project.id);
     return ok(res, { ...updated, step: 'upload' }, '프로젝트가 생성되었습니다.', 201);
   } catch (e) { console.error(e); return err(res, e.message); }
+};
+
+// ── 캐릭터 시트 추가 ──────────────────────────────────────────────────────────
+const addCharacterSheet = async (req, res) => {
+  try {
+    if (!req.file) return err(res, '파일이 없습니다.', 400);
+    const { name = '캐릭터' } = req.body;
+    const base    = ensureDirs(req.params.id);
+    const ext     = path.extname(req.file.originalname).toLowerCase();
+    const sheets  = await MvCharSheet.findByProject(req.params.id);
+    const order   = sheets.length;
+    const dest    = path.join(base, `char-sheet-${order}${ext}`);
+    fs.renameSync(req.file.path, dest);
+    const rel  = dest.replace(BASE(), '').replace(/\\/g, '/');
+    const sheet = await MvCharSheet.create({
+      project_id: req.params.id, name, char_order: order,
+      sheet_url:  `${SBASE()}/uploads${rel}`,
+      sheet_path: dest,
+    });
+    return ok(res, sheet, '캐릭터 시트 추가 완료', 201);
+  } catch (e) { return err(res, e.message); }
+};
+
+// ── 캐릭터 시트 삭제 ──────────────────────────────────────────────────────────
+const deleteCharacterSheet = async (req, res) => {
+  try {
+    await MvCharSheet.delete(req.params.sheetId, req.params.id);
+    return ok(res, null, '캐릭터 시트 삭제 완료');
+  } catch (e) { return err(res, e.message); }
 };
 
 // ── 2단계: 가사 자동 추출 (Whisper) ──────────────────────────────────────────
@@ -192,18 +225,24 @@ const generateImages = async (req, res) => {
 };
 
 async function _runImageGeneration(project) {
-  const base   = path.join(BASE(), 'mv-projects', String(project.id), 'images');
-  const images = await MvImage.findByProject(project.id);
+  const base        = path.join(BASE(), 'mv-projects', String(project.id), 'images');
+  const images      = await MvImage.findByProject(project.id);
+  // 모든 캐릭터 시트 URL 수집 (다중 캐릭터 지원)
+  const charSheets  = await MvCharSheet.findByProject(project.id);
+  const charUrls    = charSheets.map(s => s.sheet_url).filter(Boolean);
+  // 없으면 단일 캐릭터 시트로 폴백
+  if (!charUrls.length && project.character_sheet_url) charUrls.push(project.character_sheet_url);
   let done = 0;
 
   for (const img of images) {
-    if (img.image_status === 'done') { done++; continue; } // 이미 생성된 것 스킵
+    if (img.image_status === 'done') { done++; continue; }
     try {
       await MvImage.updateImageResult(img.id, { image_url: null, image_path: null, image_status: 'generating', image_error: null, fal_request_id: null });
       const outPath = path.join(base, `img_${img.id}.png`);
       const result  = await imageGenSvc.generateImage({
         prompt: img.prompt,
-        characterSheetUrl: project.character_sheet_url,
+        characterSheetUrls: charUrls,          // 배열로 전달
+        characterSheetUrl:  charUrls[0] || null, // 단일 호환
         globalStyle: project.global_style,
         outputPath: outPath,
       });
@@ -329,6 +368,7 @@ const getStatus = async (req, res) => {
 
 module.exports = {
   listProjects, getProject, createProject,
+  addCharacterSheet, deleteCharacterSheet,
   transcribeLyrics, saveLyrics,
   breakdownScenes, updateScene, updateImagePrompt,
   generateImages, regenerateImage,

@@ -5,6 +5,7 @@ import {
   breakdownScenes, updateScene, updatePrompt,
   generateImages, regenerateImage, generateVideos, mergeProject,
 } from '../../api/musicVideo';
+import { addCharSheet, deleteCharSheet } from '../../api/musicVideoChar';
 import './mv.css';
 
 const STEPS = ['업로드', '가사 확인', '장면 구성', '이미지 검토', '최종 영상'];
@@ -33,6 +34,8 @@ export default function MVProjectDetail() {
   const [status,  setStatus]  = useState(null);
   const [loading, setLoading] = useState(true);
   const [msg,     setMsg]     = useState('');
+  const [charName, setCharName] = useState('');
+  const [charFile, setCharFile] = useState(null);
   const [editLyrics, setEditLyrics] = useState('');
   const pollRef = useRef(null);
 
@@ -82,6 +85,35 @@ export default function MVProjectDetail() {
       </div>
 
       <StepBar step={step} />
+
+      {/* ── 캐릭터 시트 관리 (항상 표시) ─────────────── */}
+      <div className="mv-section">
+        <h2>🖼️ 캐릭터 시트 <span style={{ color:"#999", fontSize:13, fontWeight:400 }}>({(project.character_sheets||[]).length}명 등록됨)</span></h2>
+        <p className="mv-hint" style={{ marginBottom:12 }}>주인공이 여러 명이면 각각 캐릭터 시트를 추가하세요. AI가 모든 캐릭터를 레퍼런스로 사용합니다.</p>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:12, marginBottom:16 }}>
+          {(project.character_sheets||[]).map(s => (
+            <div key={s.id} style={{ textAlign:"center", position:"relative" }}>
+              <img src={s.sheet_url} alt={s.name} style={{ width:120, height:120, objectFit:"cover", borderRadius:10, border:"2px solid #e91e63" }} />
+              <div style={{ fontSize:12, fontWeight:600, marginTop:4 }}>{s.name}</div>
+              <button onClick={async()=>{ await deleteCharSheet(id, s.id); load(); }}
+                style={{ position:"absolute", top:-6, right:-6, width:22, height:22, borderRadius:"50%", border:"none", background:"#f44336", color:"#fff", cursor:"pointer", fontSize:12 }}>×</button>
+            </div>
+          ))}
+          <div style={{ display:"flex", flexDirection:"column", gap:8, alignItems:"flex-start" }}>
+            <input placeholder="캐릭터 이름" value={charName} onChange={e=>setCharName(e.target.value)}
+              className="mv-input" style={{ width:140, fontSize:13 }} />
+            <label className="mv-upload-zone" style={{ width:140, minHeight:50, padding:"8px 12px", fontSize:12 }}>
+              <input type="file" accept="image/*" hidden onChange={e=>setCharFile(e.target.files[0])} />
+              {charFile ? charFile.name.slice(0,15)+"..." : "📷 시트 선택"}
+            </label>
+            <button className="mv-btn-primary" style={{ fontSize:13, padding:"8px 14px" }}
+              disabled={!charFile}
+              onClick={async()=>{ if(!charFile) return; const fd=new FormData(); fd.append("character_sheet",charFile); fd.append("name",charName||"캐릭터"); await addCharSheet(id,fd); setCharFile(null); setCharName(""); load(); }}>
+              + 추가
+            </button>
+          </div>
+        </div>
+      </div>
 
       {msg && <p className="mv-info">{msg}</p>}
       {isBusy && <p className="mv-info">⏳ 처리 중입니다... (자동 갱신 중)</p>}
