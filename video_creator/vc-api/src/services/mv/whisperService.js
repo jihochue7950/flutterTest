@@ -1,7 +1,9 @@
 'use strict';
-// Whisper AI로 음악 파일에서 가사 자동 추출
+const path  = require('path');
+const fs    = require('fs');
 
-async function transcribeAudio(audioUrl) {
+// Whisper AI로 음악 파일에서 가사 자동 추출
+async function transcribeAudio(audioUrl, audioPath) {
   const FAL_KEY = process.env.FAL_KEY || '';
   if (!FAL_KEY) {
     console.warn('[Whisper] FAL_KEY 없음 → 샘플 가사 반환');
@@ -11,28 +13,58 @@ async function transcribeAudio(audioUrl) {
   const { fal } = require('@fal-ai/client');
   fal.config({ credentials: FAL_KEY });
 
-  console.log('[Whisper] 가사 추출 시작:', audioUrl);
+  // localhost URL → 로컬 파일을 fal.ai 스토리지에 업로드
+  let publicUrl = audioUrl;
+  if (!audioUrl || audioUrl.startsWith('http://localhost') || audioUrl.startsWith('http://127.')) {
+    const localPath = audioPath || _resolveLocalPath(audioUrl);
+    if (!localPath || !fs.existsSync(localPath)) {
+      throw new Error(`음악 파일을 찾을 수 없습니다: ${localPath}`);
+    }
+    console.log('[Whisper] 음악 파일 fal.ai 스토리지 업로드 중...');
+    const buffer = fs.readFileSync(localPath);
+    const ext    = path.extname(localPath).toLowerCase();
+    const mime   = ext === '.wav' ? 'audio/wav' : ext === '.m4a' ? 'audio/mp4' : 'audio/mpeg';
+    publicUrl    = await fal.storage.upload(new Blob([buffer], { type: mime }));
+    console.log('[Whisper] 업로드 완료:', publicUrl);
+  }
+
+  console.log('[Whisper] 가사 추출 시작 (fal-ai/whisper)...');
   try {
     const result = await fal.subscribe('fal-ai/whisper', {
       input: {
-        audio_url: audioUrl,
-        task: 'transcribe',
-        language: 'ko',       // 한국어 우선, 자동 감지도 가능
+        audio_url:   publicUrl,
+        task:        'transcribe',
+        language:    'ko',
         chunk_level: 'segment',
-        version: 'large-v3',
+        version:     '3',
       },
     });
 
-    // 결과 파싱: 타임스탬프 포함 가사 추출
-    const text = result?.text || result?.transcription || '';
-    const chunks = result?.chunks || [];
+    // 응답 구조 디버그
+    console.log('[Whisper] 응답 키:', Object.keys(result || {}));
 
-    console.log('[Whisper] 가사 추출 완료, 길이:', text.length);
+    // 다양한 응답 구조 처리
+    const text =
+      result?.text ||
+      result?.transcription ||
+      result?.output?.text ||
+      result?.data?.text ||
+      (Array.isArray(result?.chunks) ? result.chunks.map(c => c.text).join(' ') : '') ||
+      '';
+    const chunks = result?.chunks || result?.output?.chunks || [];
+    console.log('[Whisper] 가사 추출 완료, 길이:', text.length, '자');
     return { text, chunks };
   } catch (e) {
-    console.error('[Whisper] 오류:', e.message);
+    console.error('[Whisper] 오류:', e.message, e.body || '');
     throw new Error(`가사 추출 실패: ${e.message}`);
   }
+}
+
+function _resolveLocalPath(url) {
+  if (!url) return null;
+  const serverBase = process.env.SERVER_BASE_URL || 'http://localhost:5001';
+  const uploadBase = process.env.UPLOAD_BASE_PATH || path.join(__dirname, '../../../uploads');
+  return path.join(uploadBase, url.replace(serverBase + '/uploads', ''));
 }
 
 function _mockLyrics() {

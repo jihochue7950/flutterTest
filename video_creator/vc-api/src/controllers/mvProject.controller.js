@@ -127,7 +127,7 @@ const transcribeLyrics = async (req, res) => {
     res.json({ success: true, message: '가사 추출을 시작했습니다.' });
 
     // 백그라운드 실행
-    whisperSvc.transcribeAudio(p.music_url).then(async ({ text }) => {
+    whisperSvc.transcribeAudio(p.music_url, p.music_path).then(async ({ text }) => {
       await MvProject.updateLyrics(p.id, { lyrics_raw: text, lyrics_edited: text, step: 'lyrics_review' });
       console.log(`[MV] 프로젝트 ${p.id} 가사 추출 완료`);
     }).catch(async e => {

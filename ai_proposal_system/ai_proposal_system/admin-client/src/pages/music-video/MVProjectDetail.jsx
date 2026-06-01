@@ -38,6 +38,7 @@ export default function MVProjectDetail() {
   const [charFile, setCharFile] = useState(null);
   const [editLyrics, setEditLyrics] = useState('');
   const pollRef = useRef(null);
+  const prevStepRef = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -61,6 +62,23 @@ export default function MVProjectDetail() {
     if (status && !busy.includes(status.step)) {
       clearInterval(pollRef.current);
     }
+  }, [status?.step]);
+
+
+  // 단계 변경 감지 → 자동 알림 + 스크롤
+  useEffect(() => {
+    const busy = ["transcribing","breaking_down","generating_images","generating_videos","merging"];
+    if (prevStepRef.current && status?.step !== prevStepRef.current && !busy.includes(status?.step)) {
+      const labels = {
+        lyrics_review:  "✅ 가사 추출 완료! 아래에서 확인 후 다음 단계로 이동하세요.",
+        scene_review:   "✅ 장면 분리 완료! 아래에서 장면을 확인하고 이미지 생성을 시작하세요.",
+        image_review:   "✅ 이미지 생성 완료! 각 이미지를 검토하세요.",
+        done:           "🎉 뮤직비디오 완성!"
+      };
+      const label = labels[status.step];
+      if (label) { setMsg(label); setTimeout(() => window.scrollTo({ top: 400, behavior: "smooth" }), 300); }
+    }
+    prevStepRef.current = status?.step;
   }, [status?.step]);
 
   const doAction = async (fn, msg) => {
