@@ -60,6 +60,8 @@ export default function MVProjectDetail() {
   useEffect(() => {
     const busy = ['transcribing','breaking_down','generating_images','generating_videos','merging'];
     if (status && !busy.includes(status.step)) {
+      // 완료 후 한 번 더 load 해서 UI 확실히 갱신
+      setTimeout(load, 500);
       clearInterval(pollRef.current);
     }
   }, [status?.step]);
