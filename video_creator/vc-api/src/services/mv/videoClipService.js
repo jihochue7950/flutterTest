@@ -36,8 +36,16 @@ async function imageToVideo({ imageUrl, imagePath, prompt, durationSeconds, outp
     console.log(`[VideoClip] 상태: ${status.status} (${(i+1)*10}초)`);
     if (status.status === 'COMPLETED') {
       const result  = await fal.queue.result(ENDPOINT, { requestId: submitted.request_id });
-      const vidUrl  = result?.video?.url || result?.output?.video?.url;
-      if (!vidUrl) throw new Error('영상 URL을 찾을 수 없습니다.');
+      // fal.ai는 data 안에 넣는 경우가 있음 (imageGenService와 동일 패턴)
+      const d = result?.data || result;
+      const vidUrl = d?.video?.url
+          || d?.output?.video?.url
+          || d?.videos?.[0]?.url
+          || result?.video?.url
+          || result?.output?.video?.url
+          || null;
+      console.log('[VideoClip] 응답 키:', Object.keys(result || {}));
+      if (!vidUrl) throw new Error(`영상 URL 없음. 응답: ${JSON.stringify(result).slice(0,300)}`);
       await _downloadFile(vidUrl, outputPath);
       const serverBase = process.env.SERVER_BASE_URL || 'http://localhost:5001';
       const uploadBase = process.env.UPLOAD_BASE_PATH || '';

@@ -312,7 +312,7 @@ async function _runVideoGeneration(project) {
       await MvImage.updateVideoResult(img.id, { video_url: null, video_path: null, video_status: 'failed', video_error: e.message });
     }
   }
-  await MvProject.updateStep(project.id, 'image_review'); // 검토 화면으로 복귀
+  await MvProject.updateStep(project.id, "image_review");
   console.log(`[MV] 프로젝트 ${project.id} 영상 클립 생성 완료`);
 }
 

@@ -43,9 +43,18 @@ async function generateImage({ prompt, characterSheetUrls = [], characterSheetUr
     const status = await fal.queue.status(MODEL, { requestId });
     console.log(`[ImageGen] 상태: ${status.status} (${(i+1)*10}초)`);
     if (status.status === 'COMPLETED') {
-      const result = await fal.queue.result(MODEL, { requestId });
+      let result;
+      try {
+        result = await fal.queue.result(MODEL, { requestId });
+        console.log('[ImageGen] 응답 키:', Object.keys(result || {}));
+        if (result?.images) console.log('[ImageGen] images[0]:', JSON.stringify(result.images[0]).slice(0,150));
+        if (result?.data) console.log('[ImageGen] data 키:', Object.keys(result.data || {}));
+      } catch (resultErr) {
+        console.error('[ImageGen] result 호출 오류:', resultErr?.message, resultErr?.status, JSON.stringify(resultErr?.body || ''));
+        throw new Error(`result 조회 실패: ${resultErr?.message || JSON.stringify(resultErr)}`);
+      }
       const imgUrl = _parseImageUrl(result);
-      if (!imgUrl) throw new Error('이미지 URL을 찾을 수 없습니다.');
+      if (!imgUrl) throw new Error(`이미지 URL 없음. 응답: ${JSON.stringify(result).slice(0,300)}`);
 
       await _downloadFile(imgUrl, outputPath);
       console.log(`[ImageGen] 이미지 저장 완료: ${path.basename(outputPath)}`);
@@ -57,9 +66,13 @@ async function generateImage({ prompt, characterSheetUrls = [], characterSheetUr
 }
 
 function _parseImageUrl(result) {
-  return result?.images?.[0]?.url
+  // fal.ai는 결과를 result.data 안에 넣는 경우가 있음
+  const d = result?.data || result;
+  return d?.images?.[0]?.url
+      || d?.image?.url
+      || d?.output?.image?.url
+      || result?.images?.[0]?.url
       || result?.image?.url
-      || result?.output?.image?.url
       || null;
 }
 
