@@ -1,18 +1,20 @@
 'use strict';
-const path = require('path');
-const fs   = require('fs');
-const https = require('https');
-const http  = require('http');
+const path    = require('path');
+const fs      = require('fs');
+const os      = require('os');
+const https   = require('https');
+const http    = require('http');
+const ffmpeg  = require('fluent-ffmpeg');
+const ffmpegP = require('ffmpeg-static');
+if (ffmpegP) ffmpeg.setFfmpegPath(ffmpegP);
 
-// fal.ai FLUX Kontext — 다중 캐릭터 시트 + 프롬프트 → 이미지 생성
-async function generateImage({ prompt, characterSheetUrls = [], characterSheetUrl, globalStyle, outputPath }) {
+// fal.ai FLUX Kontext — 다중 캐릭터 시트 합성 + 프롬프트 → 이미지 생성
+async function generateImage({ prompt, characterSheetUrls = [], characterSheetUrl, characterLocalPaths = [], globalStyle, outputPath }) {
   const FAL_KEY = process.env.FAL_KEY || '';
   const MODEL   = process.env.IMAGE_MODEL || 'fal-ai/flux-pro/kontext';
 
-  // 단일 URL도 배열로 통합
-  const allUrls = characterSheetUrls.length > 0
-    ? characterSheetUrls
-    : (characterSheetUrl ? [characterSheetUrl] : []);
+  const allUrls   = characterSheetUrls.length > 0 ? characterSheetUrls : (characterSheetUrl ? [characterSheetUrl] : []);
+  const allPaths  = characterLocalPaths.filter(p => p && fs.existsSync(p));
 
   if (!FAL_KEY) {
     console.warn('[ImageGen] FAL_KEY 없음 → Mock 이미지 생성');
@@ -22,16 +24,37 @@ async function generateImage({ prompt, characterSheetUrls = [], characterSheetUr
   const { fal } = require('@fal-ai/client');
   fal.config({ credentials: FAL_KEY });
 
-  // 모든 캐릭터 시트를 공개 URL로 변환
-  const publicUrls = (await Promise.all(allUrls.map(u => _toPublicUrl(u, fal)))).filter(Boolean);
+  // 캐릭터가 2명 이상이면 ffmpeg로 가로 합성 → 단일 레퍼런스 이미지 생성
+  let referenceUrl = null;
+  if (allPaths.length >= 2) {
+    const combinedPath = path.join(os.tmpdir(), `combined_chars_${Date.now()}.png`);
+    try {
+      await _combineImages(allPaths, combinedPath);
+      console.log(`[ImageGen] 캐릭터 ${allPaths.length}명 합성 완료`);
+      const buf  = fs.readFileSync(combinedPath);
+      referenceUrl = await fal.storage.upload(new Blob([buf], { type: 'image/png' }));
+      fs.unlink(combinedPath, () => {});
+      console.log(`[ImageGen] 합성 레퍼런스 업로드: ${referenceUrl.slice(0, 60)}...`);
+    } catch (e) {
+      console.warn('[ImageGen] 합성 실패, 첫 번째 시트만 사용:', e.message);
+    }
+  }
+
+  // 합성 실패하거나 1명이면 첫 번째 시트 단독 사용
+  if (!referenceUrl) {
+    if (allPaths.length === 1) {
+      const buf = fs.readFileSync(allPaths[0]);
+      referenceUrl = await fal.storage.upload(new Blob([buf], { type: 'image/png' }));
+    } else if (allUrls.length > 0) {
+      referenceUrl = await _toPublicUrl(allUrls[0], fal);
+    }
+  }
 
   const fullPrompt = globalStyle ? `${globalStyle}. ${prompt}` : prompt;
-  const charCount  = publicUrls.length;
-  console.log(`[ImageGen] ${MODEL} 이미지 생성 중... (캐릭터 ${charCount}명 레퍼런스)`);
+  console.log(`[ImageGen] ${MODEL} 이미지 생성 중... (캐릭터 ${allPaths.length}명 합성 레퍼런스)`);
 
-  // FLUX Kontext: image_url (첫 번째 캐릭터, 나머지는 프롬프트로 설명)
-  const input = publicUrls.length > 0
-    ? { prompt: fullPrompt, image_url: publicUrls[0] }
+  const input = referenceUrl
+    ? { prompt: fullPrompt, image_url: referenceUrl }
     : { prompt: fullPrompt };
 
   const submitted = await fal.queue.submit(MODEL, { input });
@@ -63,6 +86,23 @@ async function generateImage({ prompt, characterSheetUrls = [], characterSheetUr
     if (status.status === 'FAILED') throw new Error(`이미지 생성 실패: ${JSON.stringify(status.error)}`);
   }
   throw new Error('이미지 생성 타임아웃');
+}
+
+// 여러 캐릭터 시트를 가로로 합성 (ffmpeg hstack)
+function _combineImages(imagePaths, outputPath) {
+  return new Promise((resolve, reject) => {
+    const cmd = ffmpeg();
+    imagePaths.forEach(p => cmd.input(p));
+    const filter = imagePaths.map((_, i) => `[${i}:v]scale=512:-1[s${i}]`).join(';')
+      + `;${imagePaths.map((_, i) => `[s${i}]`).join('')}hstack=inputs=${imagePaths.length}[out]`;
+    cmd
+      .complexFilter(filter)
+      .outputOptions(['-map [out]'])
+      .output(outputPath)
+      .on('end', resolve)
+      .on('error', (e) => reject(new Error(`합성 실패: ${e.message}`)))
+      .run();
+  });
 }
 
 function _parseImageUrl(result) {

@@ -160,11 +160,15 @@ const breakdownScenes = async (req, res) => {
     await MvProject.updateStep(p.id, 'breaking_down');
     res.json({ success: true, message: '장면 분리를 시작했습니다.' });
 
+    const charSheetsForBreak = await MvCharSheet.findByProject(p.id);
+    const charNamesForBreak = charSheetsForBreak.map(s => s.name);
+
     breakdownSvc.breakdownLyrics({
       lyrics,
       duration:      p.music_duration || 180,
       globalStyle:   p.global_style,
       characterDesc: p.character_desc,
+      characterNames: charNamesForBreak,
       imagesPerScene: parseInt(images_per_scene),
     }).then(async ({ scenes }) => {
       // DB에 장면 저장
@@ -228,10 +232,11 @@ async function _runImageGeneration(project) {
   const base        = path.join(BASE(), 'mv-projects', String(project.id), 'images');
   const images      = await MvImage.findByProject(project.id);
   // 모든 캐릭터 시트 URL 수집 (다중 캐릭터 지원)
-  const charSheets  = await MvCharSheet.findByProject(project.id);
-  const charUrls    = charSheets.map(s => s.sheet_url).filter(Boolean);
-  // 없으면 단일 캐릭터 시트로 폴백
+  const charSheets      = await MvCharSheet.findByProject(project.id);
+  const charUrls        = charSheets.map(s => s.sheet_url).filter(Boolean);
+  const charLocalPaths  = charSheets.map(s => s.sheet_path).filter(p => p && require('fs').existsSync(p));
   if (!charUrls.length && project.character_sheet_url) charUrls.push(project.character_sheet_url);
+  if (!charLocalPaths.length && project.character_sheet_path) charLocalPaths.push(project.character_sheet_path);
   let done = 0;
 
   for (const img of images) {
@@ -240,11 +245,12 @@ async function _runImageGeneration(project) {
       await MvImage.updateImageResult(img.id, { image_url: null, image_path: null, image_status: 'generating', image_error: null, fal_request_id: null });
       const outPath = path.join(base, `img_${img.id}.png`);
       const result  = await imageGenSvc.generateImage({
-        prompt: img.prompt,
-        characterSheetUrls: charUrls,          // 배열로 전달
-        characterSheetUrl:  charUrls[0] || null, // 단일 호환
-        globalStyle: project.global_style,
-        outputPath: outPath,
+        prompt:              img.prompt,
+        characterSheetUrls:  charUrls,
+        characterSheetUrl:   charUrls[0] || null,
+        characterLocalPaths: charLocalPaths,   // ← 로컬 경로 배열 전달 (합성용)
+        globalStyle:         project.global_style,
+        outputPath:          outPath,
       });
       const rel = outPath.replace(BASE(), '').replace(/\\/g, '/');
       await MvImage.updateImageResult(img.id, {

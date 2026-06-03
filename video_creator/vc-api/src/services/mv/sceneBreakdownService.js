@@ -1,7 +1,6 @@
 'use strict';
-// Claude AI로 가사 → 초 단위 장면 분리 + 이미지 프롬프트 생성
 
-async function breakdownLyrics({ lyrics, duration, globalStyle, characterDesc, imagesPerScene = 2 }) {
+async function breakdownLyrics({ lyrics, duration, globalStyle, characterDesc, imagesPerScene = 2, characterNames = [] }) {
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
   if (!ANTHROPIC_KEY) {
     console.warn('[Breakdown] ANTHROPIC_API_KEY 없음 → Mock 장면 반환');
@@ -11,53 +10,72 @@ async function breakdownLyrics({ lyrics, duration, globalStyle, characterDesc, i
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
 
-  const prompt = `You are a professional music video director. Analyze the following song lyrics and create a detailed scene breakdown for a music video.
+  // 캐릭터 정보 구성
+  const charInfo = characterNames.length > 0
+    ? characterNames.map((n, i) => `캐릭터${i + 1}: ${n}`).join(', ')
+    : (characterDesc || '주인공 캐릭터');
 
-Song duration: ${duration} seconds
-Lyrics:
+  const numScenes = Math.ceil(duration / (imagesPerScene * 5));
+
+  const systemPrompt = `You are a professional music video director and AI image prompt specialist.
+Your job is to create MAXIMALLY DETAILED image prompts that bring song lyrics to life visually.
+Each prompt will be used to generate an AI image, so every detail matters.
+
+RULES:
+- Every prompt MUST be in English
+- Every prompt MUST be at least 60 words
+- Prompts must reflect the EXACT emotional story of the specific lyrics
+- Character names: ${charInfo}
+- When both characters appear together, describe BOTH their positions, actions, and expressions
+- Visual style to maintain: ${globalStyle || '3D Pixar animation style, vibrant colors, cinematic quality'}`;
+
+  const userPrompt = `Song lyrics:
 ${lyrics}
 
-Character description: ${characterDesc || 'A cute animated character'}
-Visual style: ${globalStyle || '3D animation style, Pixar-inspired, vibrant colors'}
-Images per scene: ${imagesPerScene} (each image will become a ${5}-second video clip)
+Total duration: ${duration} seconds
+Create EXACTLY ${numScenes} scenes. Each scene has ${imagesPerScene} images × 5 seconds = ${imagesPerScene * 5}s per scene.
 
-Instructions:
-1. Divide the song into ${Math.ceil(duration / (imagesPerScene * 5))} scenes based on the emotional flow of the lyrics
-2. Each scene should cover a specific emotional moment (first meeting, longing, joy, etc.)
-3. Generate ${imagesPerScene} image prompts per scene - each prompt describes one static illustration
-4. Image prompts MUST be in English, very detailed, and include the visual style
-5. Make sure the time ranges add up to approximately ${duration} seconds total
+For EACH image prompt, you MUST include ALL 6 elements:
+1. [WHO] Which character(s) appear and their EXACT pose/body position
+2. [ACTION] Precisely what they are physically doing (not just standing - be specific)
+3. [EXPRESSION] Exact facial expression and emotion visible (tears, smile type, eye direction, etc.)
+4. [CAMERA] Specific camera angle (e.g., extreme close-up on eyes, low-angle wide shot, over-shoulder)
+5. [LIGHTING] Detailed lighting (e.g., soft golden backlight at sunset, cool moonlight casting shadows)
+6. [BACKGROUND] Specific detailed setting that matches the story of the lyrics
+End each prompt with: visual style: ${globalStyle || '3D Pixar animation style, vibrant colors, cinematic'}
 
-Return ONLY valid JSON in this exact format:
+Make prompts reflect the lyrical story PRECISELY. If lyrics say "I miss you", show longing. If "first meeting", show surprise and shyness.
+
+Return ONLY valid JSON:
 {
   "scenes": [
     {
       "scene_order": 1,
       "time_start": 0,
-      "time_end": 10,
-      "theme": "첫만남",
-      "emotion": "설렘",
-      "lyrics_segment": "처음 만난 그 날...",
+      "time_end": ${imagesPerScene * 5},
+      "theme": "장면테마(한국어)",
+      "emotion": "감정(한국어)",
+      "lyrics_segment": "해당 가사 구절",
       "images": [
         {
           "image_order": 1,
           "video_duration": 5,
-          "prompt": "cute 3D animated girl standing in cherry blossom park, spring morning, surprised and happy expression, first meeting moment, soft bokeh background, warm golden sunlight, Pixar 3D animation style, vibrant colors, cinematic quality"
+          "prompt": "DETAILED 60+ WORD PROMPT HERE with all 6 elements"
         }
       ]
     }
   ]
 }`;
 
-  console.log('[Breakdown] Claude 장면 분리 요청 중...');
+  console.log('[Breakdown] Claude Sonnet 장면 분리 요청 중...');
   const msg = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 4096,
-    messages: [{ role: 'user', content: prompt }],
+    model:      'claude-sonnet-4-6',
+    max_tokens: 8192,
+    system:     systemPrompt,
+    messages:   [{ role: 'user', content: userPrompt }],
   });
 
   const raw = msg.content[0]?.text || '';
-  // JSON 부분만 추출
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Claude 응답에서 JSON을 찾을 수 없습니다.');
 
@@ -71,7 +89,6 @@ function _mockBreakdown(lyrics, duration, imagesPerScene) {
   const segDuration = duration / numScenes;
   const themes = ['첫만남', '설렘', '그리움', '행복', '사랑 고백', '함께하는 순간'];
   const emotions = ['설렘', '두근거림', '그리움', '행복', '긴장', '따뜻함'];
-
   return {
     scenes: Array.from({ length: numScenes }, (_, i) => ({
       scene_order: i + 1,
@@ -83,7 +100,7 @@ function _mockBreakdown(lyrics, duration, imagesPerScene) {
       images: Array.from({ length: imagesPerScene }, (_, j) => ({
         image_order: j + 1,
         video_duration: 5,
-        prompt: `cute 3D animated character, scene ${i + 1} image ${j + 1}, ${themes[i % themes.length]} moment, Pixar animation style, vibrant colors, cinematic quality [MOCK - ANTHROPIC_API_KEY 설정 필요]`,
+        prompt: `cute 3D animated character, scene ${i + 1} image ${j + 1}, ${themes[i % themes.length]} moment, close-up showing emotion, soft cinematic lighting, Pixar animation style [MOCK]`,
       })),
     })),
   };
