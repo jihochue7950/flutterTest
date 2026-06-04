@@ -24,7 +24,7 @@ video_creator/
 mysql -u root -p ai_proposal < schema-team-d.sql
 
 # 또는 EC2 DB에 직접 연결 시
-mysql -h 3.34.99.69 -u aiadmin -p'our10680^^' ai_proposal < schema-team-d.sql
+mysql -h 3.34.99.69 -u [DB_USER] -p[DB_PASSWORD] ai_proposal < schema-team-d.sql
 ```
 
 ### 2. vc-api 실행

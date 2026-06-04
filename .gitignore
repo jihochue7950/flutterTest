@@ -15,12 +15,13 @@
 *.mkv
 *.m4v
 
-# 환경 변수 파일 (민감 정보 포함 시 커밋 금지)
-# env.json: 로컬 개발용 (localhost 주소)
+# 환경 변수 파일 (민감 정보 포함 — 절대 커밋 금지)
 flutter_application_1/config/env.json
-# env.prod.json: 서버 URL만 포함 (Solapi 키 제거됨) → 커밋 허용
-# flutter_application_1/config/env.prod.json
 ai_proposal_system/**/admin-server/.env
+
+# vc-api 로컬 환경 파일 (실제 API 키 포함)
+video_creator/vc-api/.env.local
+video_creator/vc-api/.env.local.example
 
 # 빌드 산출물 / 패키지
 ai_proposal_system/**/admin-client/build/
